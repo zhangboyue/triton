@@ -487,17 +487,32 @@ instruction* broadcast_inst::create(value *arg, const type::tile_shapes_t &shape
 //                               matmul_inst classes
 //===----------------------------------------------------------------------===//
 
-matmul_inst::matmul_inst(value *A, value *B, value *C,
+dot_inst::dot_inst(value *A, value *B, value *C, TransT AT, TransT BT,
                          const std::string &name, instruction *next)
-    : builtin_inst(C->get_type(), 3, 0, name, next) {
+    : builtin_inst(C->get_type(), 3, 0, name, next), AT_(AT), BT_(BT) {
   set_operand(0, A);
   set_operand(1, B);
   set_operand(2, C);
 }
 
-instruction *matmul_inst::create(value *A, value *B, value *C,
+instruction *dot_inst::create_nn(value *A, value *B, value *C,
                                  const std::string &name, instruction *next) {
-  return new matmul_inst(A, B, C, name, next);
+  return new dot_inst(A, B, C, NoTrans, NoTrans, name, next);
+}
+
+instruction *dot_inst::create_nt(value *A, value *B, value *C,
+                                 const std::string &name, instruction *next) {
+  return new dot_inst(A, B, C, NoTrans, Trans, name, next);
+}
+
+instruction *dot_inst::create_tn(value *A, value *B, value *C,
+                                 const std::string &name, instruction *next) {
+  return new dot_inst(A, B, C, Trans, NoTrans, name, next);
+}
+
+instruction *dot_inst::create_tt(value *A, value *B, value *C,
+                                 const std::string &name, instruction *next) {
+  return new dot_inst(A, B, C, Trans, Trans, name, next);
 }
 
 //===----------------------------------------------------------------------===//

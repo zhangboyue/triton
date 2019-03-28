@@ -124,7 +124,7 @@ public:
   value *create_broadcast(value *arg, const type::tile_shapes_t &shapes, const std::string &name = "");
   // Built-in instruction
   value *create_get_global_range(unsigned axis, type::tile_shapes_t::value_type size, const std::string &name = "");
-  value *create_matmul(value *A, value *B, value *C, const std::string &name = "");
+  value *create_dot(value *A, value *B, value *C, const std::string &name = "");
   // Intrinsics
   value *create_copy_to_shared(value *arg, const std::string &name = "");
   value *create_vectorize(value *arg, const std::string &name = "");

@@ -554,7 +554,7 @@ ir::value* matmul_expression::codegen(ir::module *mod) const {
 //  ir::type *tile_ty = ir::tile_type::get(scalar_ty, {M, N});
 //  ir::value *tmp = ir::undef_value::get(tile_ty);
 //  implicit_broadcast(mod, tmp, C);
-  return mod->get_builder().create_matmul(A, B, C);
+  return mod->get_builder().create_dot(A, B, C);
 }
 
 

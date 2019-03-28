@@ -68,7 +68,7 @@ void tune::init_c_graph(ir::instruction *v) {
     }
   }
   // Matrix multiplication
-  else if(dynamic_cast<ir::matmul_inst*>(v)){
+  else if(dynamic_cast<ir::dot_inst*>(v)){
     ir::value *D = v->get_operand(2);
     add_constraint({v, 0}, {D, 0});
     add_constraint({v, 1}, {D, 1});

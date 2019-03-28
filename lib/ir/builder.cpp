@@ -293,8 +293,8 @@ value *builder::create_get_global_range(unsigned axis, type::tile_shapes_t::valu
   return insert(get_global_range_inst::create(ctx_, axis, size, name));
 }
 
-value *builder::create_matmul(value *A, value *B, value *C, const std::string &name) {
-  return insert(matmul_inst::create(A, B, C, name));
+value *builder::create_dot(value *A, value *B, value *C, const std::string &name) {
+  return insert(dot_inst::create_nt(A, B, C, name));
 }
 
 //===----------------------------------------------------------------------===//

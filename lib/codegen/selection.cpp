@@ -730,7 +730,7 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
     else if(dynamic_cast<ir::copy_to_shared_inst*>(ins) || (buffer_info_->is_double(ins)))
       return;
     // matrix multiplication
-    else if(dynamic_cast<ir::matmul_inst*>(ins)) {
+    else if(dynamic_cast<ir::dot_inst*>(ins)) {
       ir::value *A = ins->get_operand(0);
       ir::value *B = ins->get_operand(1);
       ir::value *C = ins->get_operand(2);

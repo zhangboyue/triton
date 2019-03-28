@@ -36,7 +36,7 @@ void buffer_info_pass::run(ir::module &mod) {
   for(ir::function *fn: mod.get_function_list())
   for(ir::basic_block *block: fn->blocks())
   for(ir::instruction *i: block->get_inst_list())
-    if(dynamic_cast<ir::matmul_inst*>(i)){
+    if(dynamic_cast<ir::dot_inst*>(i)){
       shared_.insert(i->get_operand(0));
       shared_.insert(i->get_operand(1));
     }

@@ -30,7 +30,7 @@ void layout::add_phi_nodes(ir::value *v){
 // Memory Layout
 void layout::add_shared_views(ir::value *v){
   // GEMM has shared inputs
-  if(dynamic_cast<ir::matmul_inst*>(v))
+  if(dynamic_cast<ir::dot_inst*>(v))
     shared_views_[v].push_back({v, true});
   if(dynamic_cast<ir::reshape_inst*>(v))
     shared_views_[v].push_back({v, true});

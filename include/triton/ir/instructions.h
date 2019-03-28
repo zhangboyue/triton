@@ -488,15 +488,24 @@ private:
   unsigned axis_;
 };
 
-class matmul_inst: public builtin_inst {
+class dot_inst: public builtin_inst {
+public:
+  enum TransT { NoTrans, Trans };
+
 private:
-  matmul_inst(value *A, value *B, value *C, const std::string &name, instruction *next);
+  dot_inst(value *A, value *B, value *C, TransT AT, TransT BT, const std::string &name, instruction *next);
   std::string repr_impl() const { return "dot"; }
 
 public:
-  static instruction* create(value *A, value *B, value *C,
-                             const std::string &name = "",
-                             instruction *next = nullptr);
+  static instruction* create_nn(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
+  static instruction* create_nt(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
+  static instruction* create_tn(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
+  static instruction* create_tt(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
+
+
+private:
+  TransT AT_;
+  TransT BT_;
 };
 
 
