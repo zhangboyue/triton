@@ -516,6 +516,19 @@ instruction *dot_inst::create_tt(value *A, value *B, value *C,
 }
 
 //===----------------------------------------------------------------------===//
+//                               trans instructions
+//===----------------------------------------------------------------------===//
+
+trans_inst::trans_inst(value *arg, const std::string &name, instruction *next)
+  : builtin_inst(arg->get_type(), 1, 0, name, next) {
+  set_operand(0, arg);
+}
+
+instruction* trans_inst::create(value *arg, const std::string &name, instruction *next) {
+  return new trans_inst(arg, name, next);
+}
+
+//===----------------------------------------------------------------------===//
 //                               builtin instructions
 //===----------------------------------------------------------------------===//
 get_global_range_inst::get_global_range_inst(type *ty, unsigned axis,
@@ -530,6 +543,7 @@ instruction* get_global_range_inst::create(context &ctx, unsigned axis, type::ti
   type *tile_ty = tile_type::get(int_ty, {size});
   return new get_global_range_inst(tile_ty, axis, name, next);
 }
+
 
 //===----------------------------------------------------------------------===//
 //                               intrinsic instructions

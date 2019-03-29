@@ -501,13 +501,22 @@ public:
   static instruction* create_nt(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
   static instruction* create_tn(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
   static instruction* create_tt(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
-
+  bool is_a_trans() { return AT_ == Trans; }
+  bool is_b_trans() { return BT_ == Trans; }
 
 private:
   TransT AT_;
   TransT BT_;
 };
 
+class trans_inst: public builtin_inst {
+private:
+  trans_inst(value *arg, const std::string& name, instruction* next);
+  std::string repr_impl() const { return "trans"; }
+
+public:
+  static instruction* create(value *arg, const std::string &name = "", instruction *next = nullptr);
+};
 
 //===----------------------------------------------------------------------===//
 //                               intrinsics classes

@@ -42,6 +42,7 @@ using triton::ast::return_void;
 "..."                   { return return_impl(ELLIPSIS, yytext); }
 "get_global_range"      { return return_impl(GET_GLOBAL_RANGE, yytext); }
 "dot"                   { return return_impl(DOT, yytext); }
+"trans"                 { return return_impl(TRANS, yytext); }
 "continue"              { return return_impl(CONTINUE, yytext); }
 "alloc_const"           { return return_impl(ALLOC_CONST, yytext); }
 {L}({L}|{D})*           { return return_impl(IDENTIFIER, yytext); }

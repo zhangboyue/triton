@@ -557,7 +557,10 @@ ir::value* matmul_expression::codegen(ir::module *mod) const {
   return mod->get_builder().create_dot(A, B, C);
 }
 
-
+// Trans
+ir::value* trans_expression::codegen(ir::module *mod) const {
+  return mod->get_builder().create_trans(arg_->codegen(mod));
+}
 
 /* Postfix expression */
 ir::value* indexing_expression::codegen(ir::module *mod) const{
@@ -572,6 +575,7 @@ ir::value* indexing_expression::codegen(ir::module *mod) const{
     out_shapes[i] = (slices[i]->type()==NEWAXIS)?one:in_shapes[current++];
   return mod->get_builder().create_reshape(in, out_shapes);
 }
+
 
 /* Unary operator */
 ir::value *unary_operator::llvm_op(ir::builder &builder, ir::value *arg, const std::string &name) const{

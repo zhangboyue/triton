@@ -176,6 +176,15 @@ private:
   const expression *C_;
 };
 
+class trans_expression: public builtin_expression{
+public:
+  trans_expression(node *arg): arg_(arg) {}
+  ir::value* codegen(ir::module *) const;
+
+private:
+  node* arg_;
+};
+
 
 class indexing_expression: public postfix_expression{
 public:
@@ -188,6 +197,8 @@ private:
   const identifier* id_;
   const list<slice*>* slices_;
 };
+
+
 
 class named_expression: public expression {
 public:

@@ -727,16 +727,27 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
         ti->set_value(idx, in->get_value(idx));
       });
     }
+    // trans
+    else if(dynamic_cast<ir::trans_inst*>(ins)) {
+      distributed_tile* in = (distributed_tile*)tmap_.at(ins->get_operand(0));
+      in->for_each([&](indices_t idx){
+        indices_t out_idx = idx;
+        std::rotate(out_idx.begin(), out_idx.begin() + 1, out_idx.end());
+        ti->set_value(out_idx, in->get_value(idx));
+      });
+    }
     else if(dynamic_cast<ir::copy_to_shared_inst*>(ins) || (buffer_info_->is_double(ins)))
       return;
-    // matrix multiplication
-    else if(dynamic_cast<ir::dot_inst*>(ins)) {
+    // dot
+    else if(auto dot = dynamic_cast<ir::dot_inst*>(ins)) {
       ir::value *A = ins->get_operand(0);
       ir::value *B = ins->get_operand(1);
       ir::value *C = ins->get_operand(2);
       shared_tile *TA = (shared_tile*)tmap_.at(A);
       shared_tile *TB = (shared_tile*)tmap_.at(B);
       distributed_tile *TC = (distributed_tile*)tmap_.at(C);
+      bool AT = dot->is_a_trans();
+      bool BT = dot->is_b_trans();
       TA->set_vector_size(TC->axis(0).contiguous);
       TB->set_vector_size(TC->axis(1).contiguous);
       Function *f_mul_add = Intrinsic::getDeclaration(module, Intrinsic::fmuladd, {llvm_type(C->get_type()->get_scalar_ty(), ctx)});
@@ -745,7 +756,11 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
         unsigned NK = A->get_type()->get_tile_shapes()[1]->get_value();
         for(unsigned K = 0; K < NK; ++K){
           indices_t a_idx = {idx[0], builder.getInt32(K)};
-          indices_t b_idx = {idx[1], builder.getInt32(K)};
+          indices_t b_idx = {builder.getInt32(K), idx[1]};
+          if(AT)
+            std::swap(a_idx[0], a_idx[1]);
+          if(BT)
+            std::swap(b_idx[0], b_idx[1]);
           Value *a = TA->get_value(a_idx);
           Value *b = TB->get_value(b_idx);
           res = builder.CreateCall(f_mul_add, {a, b, res});

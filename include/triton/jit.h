@@ -60,7 +60,8 @@ public:
         allocation.run();
         barriers.run(module);
       }
-      vectorize.run(module);
+      ir::print(module, std::cout);
+//      vectorize.run(module);
     }
 
     codegen::tune tune;

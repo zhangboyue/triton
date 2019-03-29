@@ -294,8 +294,13 @@ value *builder::create_get_global_range(unsigned axis, type::tile_shapes_t::valu
 }
 
 value *builder::create_dot(value *A, value *B, value *C, const std::string &name) {
-  return insert(dot_inst::create_nt(A, B, C, name));
+  return insert(dot_inst::create_nn(A, B, C, name));
 }
+
+value *builder::create_trans(value *A, const std::string &name) {
+  return insert(trans_inst::create(A, name));
+}
+
 
 //===----------------------------------------------------------------------===//
 //                               intrinsic instructions

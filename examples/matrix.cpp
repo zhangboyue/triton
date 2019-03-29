@@ -20,16 +20,16 @@ void matmul(restrict read_only fp32 *A,
   int32 rkb[TK] = 0 ... TK;
   fp32 c[TM, TN] = 0;
   fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
-  fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
+  fp32* pb[TK, TN] = B + ryb[newaxis, :]*K + rkb[:, newaxis];
   fp32 a[TM, TK] = *pa;
-  fp32 b[TN, TK] = *pb;
+  fp32 b[TK, TN] = *pb;
   for(int32 k = K; k > 0;){
     c = dot(a, b, c);
     pa = pa + TK*M;
-    pb = pb + TK*K;
+    pb = pb + TK;
     k = k - TK;
     int1 checka[TM, TK] = k > bound;
-    int1 checkb[TN, TK] = k > bound;
+    int1 checkb[TK, TN] = k > bound;
     @checka a = *pa;
     @checkb b = *pb;
     if(k > bound)
@@ -39,7 +39,7 @@ void matmul(restrict read_only fp32 *A,
     int1 checkb0[TN] = ryb < N;
     int1 checkb1[TK] = rkb < k;
     checka = checka0[:, newaxis] && checka1[newaxis, :];
-    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
+    checkb = checkb0[newaxis, :] && checkb1[:, newaxis];
     a = checka ? *pa : 0;
     b = checkb ? *pb : 0;
   }
@@ -60,7 +60,7 @@ void simple_gemm(std::vector<T> &c, const std::vector<T> &a, const std::vector<T
   for(size_t n = 0; n < N; n++){
     T acc = 0;
     for(size_t k = 0; k < K; k++)
-      acc += a[m + k*M] * b[n + k*N];
+      acc += a[m + k*M] * b[k + n*K];
     c[m + n*M] = acc;
   }
 }
@@ -186,6 +186,7 @@ int main() {
     4
   };
 
+  params = {8, 2, 32, 16, 64, 4, 16, 4, 2, 8, 8, 4, 2};
 //  jit.autotune(src, benchmark);
   jit.add_module(src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
