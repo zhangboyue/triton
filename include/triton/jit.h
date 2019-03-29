@@ -10,13 +10,12 @@
 #include "triton/driver/kernel.h"
 #include "triton/codegen/selection.h"
 #include "triton/codegen/tune.h"
-#include "triton/codegen/shared_copy.h"
-#include "triton/codegen/allocation.h"
-#include "triton/codegen/liveness.h"
-#include "triton/codegen/vectorize.h"
-#include "triton/codegen/buffer_info.h"
-#include "triton/codegen/barriers.h"
+#include "triton/codegen/shmem_allocation.h"
+#include "triton/codegen/shmem_liveness.h"
+#include "triton/codegen/shmem_info.h"
+#include "triton/codegen/shmem_barriers.h"
 #include "triton/codegen/target.h"
+#include "triton/codegen/vectorize.h"
 #include <functional>
 
 namespace llvm {
@@ -45,31 +44,29 @@ public:
 
   struct passes_wrapper {
     passes_wrapper(codegen::target* target)
-                    : shared(&buffer_info), liveness(&buffer_info),
-                      allocation(&liveness, &buffer_info),
-                      barriers(&allocation, &buffer_info),
+                    : shmem_liveness(&shmem_info),
+                      shmem_allocation(&shmem_liveness, &shmem_info),
+                      shmem_barriers(&shmem_allocation, &shmem_info),
                       vectorize(&tune),
-                      selection(&allocation, &tune, &buffer_info, target),
+                      selection(&shmem_allocation, &tune, &shmem_info, target),
                       target_(target) { }
 
     void init(ir::module &module) {
       if(target_->is_gpu()){
-        buffer_info.run(module);
-        shared.run(module);
-        liveness.run(module);
-        allocation.run();
-        barriers.run(module);
+        shmem_info.run(module);
+        shmem_liveness.run(module);
+        shmem_allocation.run();
+        shmem_barriers.run(module);
       }
-      ir::print(module, std::cout);
 //      vectorize.run(module);
+      ir::print(module, std::cout);
     }
 
     codegen::tune tune;
-    codegen::buffer_info_pass buffer_info;
-    codegen::place_shared_copy shared;
-    codegen::liveness liveness;
-    codegen::allocation allocation;
-    codegen::barriers barriers;
+    codegen::shmem_info shmem_info;
+    codegen::shmem_liveness shmem_liveness;
+    codegen::shmem_allocation shmem_allocation;
+    codegen::shmem_barriers shmem_barriers;
     codegen::vectorize vectorize;
     codegen::selection selection;
     codegen::target* target_;

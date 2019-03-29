@@ -1,6 +1,6 @@
 #include "triton/codegen/selection.h"
 #include "triton/codegen/tune.h"
-#include "triton/codegen/allocation.h"
+#include "triton/codegen/shmem_allocation.h"
 #include "triton/codegen/target.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Module.h"
@@ -446,7 +446,7 @@ void selection::create_grids(std::vector<ir::value*> &grids,
         bind_references(op);
     // bind
     const auto& shapes = v->get_type()->get_tile_shapes();
-    if(dynamic_cast<ir::copy_to_shared_inst*>(v) || buffer_info_->is_double(v))
+    if(buffer_info_->is_shared(v))
       return;
     for(size_t d = 0; d < shapes.size(); d++){
       if(shapes[d]->get_value() == 1)
@@ -490,20 +490,11 @@ void selection::create_tile(ir::value *v, IRBuilder<> &builder,
     shapes2.push_back(shape->get_value());
   Type* ty = llvm_type(v->get_type()->get_scalar_ty(), ctx);
   // create shared tile
-  if(dynamic_cast<ir::copy_to_shared_inst*>(v) || (buffer_info_->is_double(v))){
+  if(buffer_info_->is_shared(v)){
     // shared copy
     PointerType *ptr_ty = ty->getPointerTo(sh_mem_ptr->getType()->getPointerAddressSpace());
-    // TODO - buffer info not up-to-date with references
-    if(dynamic_cast<ir::copy_to_shared_inst*>(v)) {
-      if(!has_phi_user(v)){
-        size_t offset = alloc_->get_offset(v);
-        Value *ptr = builder.CreateGEP(sh_mem_ptr, builder.getInt32(offset));
-        ptr = builder.CreateBitCast(ptr, ptr_ty);
-        tmap_.insert({v, new shared_tile(ty, shapes2, ptr, builder)});
-      }
-    }
     // phi-node (double-buffering)
-    else if(auto *phi = dynamic_cast<ir::phi_node*>(v)) {
+    if(auto *phi = dynamic_cast<ir::phi_node*>(v)) {
       BasicBlock *parent = (BasicBlock*)vmap_[phi->get_parent()];
       unsigned id_pre = 0, id_loop = 1;
       if(phi->get_incoming_block(0) == phi->get_parent())
@@ -527,8 +518,14 @@ void selection::create_tile(ir::value *v, IRBuilder<> &builder,
         tmap_.insert({inc_value, new shared_tile(ty, shapes2, is_loop_latch?next_ptr:pre_ptr, builder)});
       }
     }
-    else
-      throw std::runtime_error("unknown shared memory tile");
+    else {
+      if(!has_phi_user(v)){
+        size_t offset = alloc_->get_offset(v);
+        Value *ptr = builder.CreateGEP(sh_mem_ptr, builder.getInt32(offset));
+        ptr = builder.CreateBitCast(ptr, ptr_ty);
+        tmap_.insert({v, new shared_tile(ty, shapes2, ptr, builder)});
+      }
+    }
   }
   // create distributed tile
   else {
@@ -736,7 +733,7 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
         ti->set_value(out_idx, in->get_value(idx));
       });
     }
-    else if(dynamic_cast<ir::copy_to_shared_inst*>(ins) || (buffer_info_->is_double(ins)))
+    else if(buffer_info_->is_shared(ins))
       return;
     // dot
     else if(auto dot = dynamic_cast<ir::dot_inst*>(ins)) {

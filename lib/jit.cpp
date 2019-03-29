@@ -132,7 +132,7 @@ void jit::autotune(const std::string &src, benchmark_t benchmark) {
     passes.tune.init(tt_module);
     passes.init(tt_module);
     driver::device* device = driver_context_->device();
-    if(passes.allocation.get_allocated_size() > device->max_shared_memory())
+    if(passes.shmem_allocation.get_allocated_size() > device->max_shared_memory())
       return;
     if(passes.tune.get_num_threads() > device->max_threads_per_block())
       return;

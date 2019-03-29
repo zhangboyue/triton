@@ -14,7 +14,7 @@ namespace ir {
 
 namespace codegen{
 
-class buffer_info_pass {
+class shmem_info {
 public:
   void run(ir::module &mod);
   // queries

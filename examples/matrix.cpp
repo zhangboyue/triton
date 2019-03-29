@@ -21,35 +21,18 @@ void matmul(restrict read_only fp32 *A,
   fp32 c[TM, TN] = 0;
   fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
   fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
-  fp32 a[TM, TK] = *pa;
-  fp32 b[TN, TK] = *pb;
   for(int32 k = K; k > 0;){
+    fp32 a[TM, TK] = *pa;
+    fp32 b[TN, TK] = *pb;
     c = dot(a, trans(b), c);
     pa = pa + TK*M;
     pb = pb + TK*K;
     k = k - TK;
-    int1 checka[TM, TK] = k > bound;
-    int1 checkb[TN, TK] = k > bound;
-    @checka a = *pa;
-    @checkb b = *pb;
-    if(k > bound)
-      continue;
-    int1 checka0[TM] = rxa < M;
-    int1 checka1[TK] = rka < k;
-    int1 checkb0[TN] = ryb < N;
-    int1 checkb1[TK] = rkb < k;
-    checka = checka0[:, newaxis] && checka1[newaxis, :];
-    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
-    a = checka ? *pa : 0;
-    b = checkb ? *pb : 0;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
   fp32* pc[TM, TN] = C + ryc[newaxis, :]*M + rxc[:, newaxis];
-  int1 checkc0[TM] = rxc < M;
-  int1 checkc1[TN] = ryc < N;
-  int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
-  @checkc *pc = c;
+  *pc = c;
 }
 )";
 

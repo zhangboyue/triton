@@ -1,4 +1,4 @@
-#include "triton/codegen/buffer_info.h"
+#include "triton/codegen/shmem_info.h"
 #include "triton/ir/module.h"
 #include "triton/ir/function.h"
 #include "triton/ir/basic_block.h"
@@ -11,7 +11,7 @@ namespace codegen{
 
 
 // run pass on module
-bool buffer_info_pass::is_loop_latch(ir::phi_node *phi, ir::value *terminator){
+bool shmem_info::is_loop_latch(ir::phi_node *phi, ir::value *terminator){
   if(auto *br = dynamic_cast<ir::cond_branch_inst*>(terminator))
     return br->get_true_dest() == phi->get_parent()
            || br->get_false_dest() == phi->get_parent();
@@ -21,7 +21,7 @@ bool buffer_info_pass::is_loop_latch(ir::phi_node *phi, ir::value *terminator){
     throw std::runtime_error("unreachable");
 }
 
-void buffer_info_pass::replace(ir::value* before, ir::value *after) {
+void shmem_info::replace(ir::value* before, ir::value *after) {
   shared_.erase(before);
   shared_.insert(after);
   if(refs_.find(before) != refs_.end()){
@@ -31,21 +31,56 @@ void buffer_info_pass::replace(ir::value* before, ir::value *after) {
   }
 }
 
-void buffer_info_pass::run(ir::module &mod) {
-  // Find which buffers are shared
-  for(ir::function *fn: mod.get_function_list())
-  for(ir::basic_block *block: fn->blocks())
-  for(ir::instruction *i: block->get_inst_list()){
-    if(dynamic_cast<ir::dot_inst*>(i)){
-      shared_.insert(i->get_operand(0));
-      shared_.insert(i->get_operand(1));
+inline bool get_is_shared(ir::value* v) {
+  if(auto x = dynamic_cast<ir::copy_to_shared_inst*>(v))
+    return true;
+  if(auto x = dynamic_cast<ir::phi_node*>(v)){
+    bool res = true;
+    for(unsigned inc = 0; inc < x->get_num_incoming(); inc++)
+      res = res && get_is_shared(x->get_incoming_value(inc));
+    return res;
+  }
+  return false;
+}
+
+void add_copy(ir::value *x, ir::builder &builder) {
+  if(auto phi = dynamic_cast<ir::phi_node*>(x)){
+    for(unsigned i = 0; i < phi->get_num_incoming(); ++i)
+      add_copy(phi->get_incoming_value(i), builder);
+  }
+  else {
+    if(auto *i = dynamic_cast<ir::instruction*>(x)){
+      ir::basic_block* block = i->get_parent();
+      auto it = std::find(block->begin(), block->end(), i);
+      builder.set_insert_point(++it);
     }
-    if(dynamic_cast<ir::trans_inst*>(i)){
-      shared_.insert(i);
+    ir::instruction *rx = (ir::instruction*)builder.create_copy_to_shared(x);
+    x->replace_all_uses_with(rx);
+    rx->set_operand(0, x);
+  }
+}
+
+void shmem_info::run(ir::module &mod) {
+  // Add shared copies
+  for(ir::function *fn: mod.get_function_list()){
+    ir::builder builder(mod.get_context());
+    for(ir::basic_block *block: fn->blocks())
+    for(ir::instruction *i: block->get_inst_list()){
+      if(dynamic_cast<ir::dot_inst*>(i)){
+        add_copy(i->get_operand(0), builder);
+        add_copy(i->get_operand(1), builder);
+      }
     }
   }
 
-  // Handles phi nodes
+  // Find which buffers are shared
+  for(ir::function *fn: mod.get_function_list())
+  for(ir::basic_block *block: fn->blocks())
+  for(ir::instruction *i: block->get_inst_list())
+    if(get_is_shared(i))
+      shared_.insert(i);
+
+  // double-buffering
   for(ir::function *fn: mod.get_function_list())
   for(ir::basic_block *block: fn->blocks())
   for(ir::instruction *i: block->get_inst_list()) {
@@ -71,21 +106,18 @@ void buffer_info_pass::run(ir::module &mod) {
       }
     }
   }
-
-  for(auto &ref: refs_)
-    shared_.insert(ref.first);
 }
 
 // query double-buffered status
-bool buffer_info_pass::is_double(ir::value *x)
+bool shmem_info::is_double(ir::value *x)
 { return double_.find(x) != double_.end(); }
 
 // query shared status
-bool buffer_info_pass::is_shared(ir::value *x)
+bool shmem_info::is_shared(ir::value *x)
 { return shared_.find(x) != shared_.end(); }
 
 // get reference if any
-ir::value *buffer_info_pass::get_reference(ir::value *x)
+ir::value *shmem_info::get_reference(ir::value *x)
 { return refs_[x]; }
 
 

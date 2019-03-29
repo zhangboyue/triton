@@ -106,7 +106,11 @@ void module::compile_llvm_module(llvm::Module* module, const std::string& triple
                                         const std::string& features,
                                         file_type_t ft) {
   init_llvm();
-
+  // debug
+  llvm::legacy::PassManager pm;
+  pm.add(llvm::createPrintModulePass(llvm::outs()));
+  pm.add(llvm::createVerifierPass());
+  pm.run(*module);
   // create machine
   module->setTargetTriple(triple);
   std::string error;
