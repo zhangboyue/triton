@@ -57,6 +57,14 @@ void tune::init_c_graph(ir::instruction *v) {
   else if(dynamic_cast<ir::splat_inst*>(v)){
 
   }
+  // Trans
+  else if(dynamic_cast<ir::trans_inst*>(v)){
+    ir::value *op = v->get_operand(0);
+    size_t n_shapes = shapes.size();
+    for(unsigned i = 0; i < n_shapes; i++){
+      add_constraint({v, (i + 1) % n_shapes}, {op, i});
+    }
+  }
   // Broadcast
   else if(dynamic_cast<ir::broadcast_inst*>(v)){
     ir::value *op = v->get_operand(0);

@@ -510,6 +510,9 @@ private:
 };
 
 class trans_inst: public builtin_inst {
+public:
+  ir::type* get_res_ty(ir::type* in);
+
 private:
   trans_inst(value *arg, const std::string& name, instruction* next);
   std::string repr_impl() const { return "trans"; }
