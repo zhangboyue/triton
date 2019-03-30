@@ -32,6 +32,8 @@ void shmem_info::replace(ir::value* before, ir::value *after) {
 }
 
 inline bool get_is_shared(ir::value* v) {
+  if(auto x = dynamic_cast<ir::trans_inst*>(v))
+    return true;
   if(auto x = dynamic_cast<ir::copy_to_shared_inst*>(v))
     return true;
   if(auto x = dynamic_cast<ir::phi_node*>(v)){
@@ -49,6 +51,8 @@ void add_copy(ir::value *x, ir::builder &builder) {
       add_copy(phi->get_incoming_value(i), builder);
   }
   else {
+    if(get_is_shared(x))
+      return;
     if(auto *i = dynamic_cast<ir::instruction*>(x)){
       ir::basic_block* block = i->get_parent();
       auto it = std::find(block->begin(), block->end(), i);

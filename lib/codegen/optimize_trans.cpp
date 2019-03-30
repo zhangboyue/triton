@@ -5,23 +5,35 @@
 namespace triton {
 namespace codegen{
 
-//copy-to-shared(trans(x)) -> trans(x)
-//trans(copy-to-shared(x)) -> trans(x)
-void optimize_trans::replace_cts(ir::trans_inst* trans, ir::value* value,
+
+ir::value* optimize_trans::replace_phi(ir::value* value,
                                  std::vector<ir::instruction*>& to_delete,
                                  ir::builder& builder){
-  if(auto cts = dynamic_cast<ir::copy_to_shared_inst*>(value)){
-    builder.set_insert_point(trans);
-    ir::value *new_trans = builder.create_trans(trans->get_operand(0), trans->get_name());
-    trans->replace_all_uses_with(new_trans);
-    cts->replace_all_uses_with(new_trans);
-    to_delete.push_back(cts);
-    to_delete.push_back(trans);
+  if(auto phi = dynamic_cast<ir::phi_node*>(value)) {
+    // transpose operands
+    std::vector<ir::value*> incs;
+    for(unsigned n = 0; n < phi->get_num_incoming(); n++)
+      incs.push_back(replace_phi(phi->get_incoming_value(n), to_delete, builder));
+    // create phi for transposed values
+    builder.set_insert_point(phi);
+    ir::phi_node* result = builder.create_phi(incs[0]->get_type(), incs.size(), phi->get_name());
+    for(unsigned n = 0; n < phi->get_num_incoming(); n++)
+      result->add_incoming(incs[n], phi->get_incoming_block(n));
+    phi->replace_all_uses_with(result);
+    to_delete.push_back(phi);
+    return result;
   }
-  if(auto phi = dynamic_cast<ir::phi_node*>(value))
-  for(unsigned n = 0; n < phi->get_num_incoming(); n++){
-    replace_cts(trans, phi->get_incoming_value(n), to_delete, builder);
+  else if(auto i = dynamic_cast<ir::instruction*>(value)){
+    ir::basic_block* block = i->get_parent();
+    auto it = std::find(block->begin(), block->end(), i);
+    it++;
+    builder.set_insert_point(it);
+    ir::instruction *trans = (ir::instruction*)builder.create_trans(i);
+    i->replace_all_uses_with(trans);
+    trans->set_operand(0, i);
+    return trans;
   }
+  throw std::runtime_error("cannot transpose phi");
 }
 
 
@@ -38,17 +50,18 @@ void optimize_trans::run(ir::module &mod) {
       auto ops = trans->ops();
       if(users.size() > 1 || ops.size() > 1)
         continue;
-      ir::user* user = *users.begin();
       ir::value* op = *ops.begin();
-      std::cout << "op: " << typeid(*op).name() << std::endl;
-      std::cout << "user: " << typeid(*user).name() << std::endl;
-      //copy-to-shared(trans(x)) -> trans(x)
-      replace_cts(trans, user, to_delete, builder);
-      //trans(copy-to-shared(x)) -> trans(x)
-      replace_cts(trans, op, to_delete, builder);
+      // chains of transpositions
+      // TODO
+
+      // trans(phi) -> phi(trans(), trans()...)
+      if(dynamic_cast<ir::phi_node*>(op)){
+        ir::value* new_phi = replace_phi(op, to_delete, builder);
+        to_delete.push_back(trans);
+        trans->replace_all_uses_with(new_phi);
+      }
     }
   }
-  std::cout << "optimizing trans " << to_delete.size() << std::endl;
   // erase dead code
   for(ir::instruction* i: to_delete)
     i->erase_from_parent();
