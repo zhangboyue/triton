@@ -126,6 +126,7 @@ void jit::autotune(const std::string &src, benchmark_t benchmark) {
     auto ptt_module = make_triton_module(src);
     ir::module &tt_module = *ptt_module;
     passes_wrapper passes(target_.get());
+    passes.target_independent(tt_module);
     passes.tune.run(tt_module);
     i = 0;
     for(ir::metaparameter* mp: passes.tune.get_params(tt_module)){

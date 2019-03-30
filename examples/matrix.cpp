@@ -10,26 +10,24 @@ const tunable int32 TM = {16, 32, 64};
 const tunable int32 TN = {16, 32, 64};
 const tunable int32 TK = {8};
 
-void matmul(restrict read_only fp32 *A,
-            restrict read_only fp32 *B,
-            fp32 *C,
-            int32 M, int32 N, int32 K, int32 bound) {
+void matmul(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
+           int32 M, int32 N, int32 K, int32 bound){
   int32 rxa[TM] = get_global_range[TM](0);
   int32 ryb[TN] = get_global_range[TN](1);
   int32 rka[TK] = 0 ... TK;
   int32 rkb[TK] = 0 ... TK;
-  fp32 c[TM, TN] = 0;
-  fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
-  fp32* pb[TK, TN] = B + ryb[newaxis, :]*K + rkb[:, newaxis];
+  fp32 C[TM, TN] = 0;
+  fp32* pa[TM, TK] = a + rka[newaxis, :]*M + rxa[:, newaxis];
+  fp32* pb[TN, TK] = b + rkb[newaxis, :]*K + ryb[:, newaxis];
   fp32 a[TM, TK] = *pa;
-  fp32 b[TK, TN] = *pb;
+  fp32 b[TN, TK] = *pb;
   for(int32 k = K; k > 0;){
-    c = dot(a, b, c);
+    C = dot(a, trans(b), C);
     pa = pa + TK*M;
-    pb = pb + TK;
+    pb = pb + TK*K;
     k = k - TK;
     int1 checka[TM, TK] = k > bound;
-    int1 checkb[TK, TN] = k > bound;
+    int1 checkb[TN, TK] = k > bound;
     @checka a = *pa;
     @checkb b = *pb;
     if(k > bound)
@@ -39,28 +37,28 @@ void matmul(restrict read_only fp32 *A,
     int1 checkb0[TN] = ryb < N;
     int1 checkb1[TK] = rkb < k;
     checka = checka0[:, newaxis] && checka1[newaxis, :];
-    checkb = checkb1[:, newaxis] && checkb0[newaxis, :];
+    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
     a = checka ? *pa : 0;
     b = checkb ? *pb : 0;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
-  fp32* pc[TM, TN] = C + ryc[newaxis, :]*M + rxc[:, newaxis];
+  fp32* pc[TM, TN] = c + ryc[newaxis, :]*M + rxc[:, newaxis];
   int1 checkc0[TM] = rxc < M;
   int1 checkc1[TN] = ryc < N;
   int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
-  @checkc *pc = c;
+  @checkc *pc = C;
 }
 )";
 
 
-template<class T, bool AT, bool BT>
+template<class T>
 void simple_gemm(std::vector<T> &c, const std::vector<T> &a, const std::vector<T> &b, size_t M, size_t N, size_t K){
   for(size_t m = 0; m < M; m++)
   for(size_t n = 0; n < N; n++){
     T acc = 0;
     for(size_t k = 0; k < K; k++)
-      acc += (AT?a[k + m*K]:a[m + k*M]) * (BT?b[n + k*N]:b[k + n*K]);
+      acc += a[m + k*M] * b[n + k*N];
     c[m + n*M] = acc;
   }
 }
@@ -117,7 +115,7 @@ int main() {
   triton::jit jit(context);
 
   // matrix multiplication parameters
-  int32_t M = 512, N = 512, K = 512;
+  int32_t M = 1024, N = 1024, K = 1024;
   std::vector<float> hc(M*N);
   std::vector<float> rc(M*N);
   std::vector<float> ha(M*K);
@@ -185,14 +183,14 @@ int main() {
     8, 8,
     4
   };
-  params = {8, 2, 16, 16, 64, 8, 8, 2, 4, 8, 8, 4, 2};
-//  jit.autotune(src, benchmark);
+  params = {8, 2, 16, 8, 2, 16, 8, 8, 2, 2, 8, 8, 8};
+  jit.autotune(src, benchmark);
   jit.add_module(src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");
   std::cout << benchmark(kernel, info) << std::endl;
   stream->read(dc, true, 0, hc);
-  simple_gemm<float,false,false>(rc, ha, hb, M, N, K);
+  simple_gemm(rc, ha, hb, M, N, K);
   for(size_t i = 0; i < M*N; i++)
     if(std::abs(hc[i] - rc[i])/std::max(hc[i], rc[i]) > 1e-4){
       std::cout << i << " " << hc[i] << " " << rc[i] << std::endl;
