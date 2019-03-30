@@ -11,6 +11,8 @@
 #include "triton/codegen/selection.h"
 #include "triton/codegen/tune.h"
 #include "triton/codegen/optimize_dot.h"
+#include "triton/codegen/optimize_cse.h"
+#include "triton/codegen/optimize_trans.h"
 #include "triton/codegen/shmem_allocation.h"
 #include "triton/codegen/shmem_liveness.h"
 #include "triton/codegen/shmem_info.h"
@@ -51,13 +53,17 @@ public:
                       vectorize(&tune),
                       selection(&shmem_allocation, &tune, &shmem_info, target),
                       optimize_dot(&tune),
+                      optimize_cse(),
+                      optimize_trans(),
                       target_(target) { }
 
-    void pre_tune(ir::module &module) {
+    void target_independent(ir::module &module) {
         optimize_dot.run(module);
+//        optimize_cse.run(module);
+//        optimize_trans.run(module);
     }
 
-    void init(ir::module &module) {
+    void target_dependent(ir::module &module) {
       if(target_->is_gpu()){
         shmem_info.run(module);
         shmem_liveness.run(module);
@@ -76,6 +82,8 @@ public:
     codegen::vectorize vectorize;
     codegen::selection selection;
     codegen::optimize_dot optimize_dot;
+    codegen::optimize_cse optimize_cse;
+    codegen::optimize_trans optimize_trans;
     codegen::target* target_;
   };
 

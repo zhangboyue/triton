@@ -9,11 +9,18 @@ namespace triton {
 
 namespace ir {
   class module;
+  class value;
+  class instruction;
+  class trans_inst;
+  class builder;
 }
 
 namespace codegen{
 
 class optimize_trans {
+private:
+  void replace_cts(ir::trans_inst *trans, ir::value* value, std::vector<ir::instruction*>& to_delete, ir::builder &builder);
+
 public:
   optimize_trans() {}
   void run(ir::module &mod);

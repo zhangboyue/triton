@@ -20,16 +20,16 @@ void matmul(restrict read_only fp32 *A,
   int32 rkb[TK] = 0 ... TK;
   fp32 c[TM, TN] = 0;
   fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
-  fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
+  fp32* pb[TK, TN] = B + ryb[newaxis, :]*K + rkb[:, newaxis];
   fp32 a[TM, TK] = *pa;
-  fp32 b[TN, TK] = *pb;
+  fp32 b[TK, TN] = *pb;
   for(int32 k = K; k > 0;){
-    c = dot(a, trans(b), c);
+    c = dot(a, b, c);
     pa = pa + TK*M;
-    pb = pb + TK*K;
+    pb = pb + TK;
     k = k - TK;
     int1 checka[TM, TK] = k > bound;
-    int1 checkb[TN, TK] = k > bound;
+    int1 checkb[TK, TN] = k > bound;
     @checka a = *pa;
     @checkb b = *pb;
     if(k > bound)
@@ -39,7 +39,7 @@ void matmul(restrict read_only fp32 *A,
     int1 checkb0[TN] = ryb < N;
     int1 checkb1[TK] = rkb < k;
     checka = checka0[:, newaxis] && checka1[newaxis, :];
-    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
+    checkb = checkb1[:, newaxis] && checkb0[newaxis, :];
     a = checka ? *pa : 0;
     b = checkb ? *pb : 0;
   }
@@ -185,14 +185,14 @@ int main() {
     8, 8,
     4
   };
-//  params = {8, 2, 16, 16, 64, 8, 8, 2, 4, 8, 8, 4, 2};
+  params = {8, 2, 16, 16, 64, 8, 8, 2, 4, 8, 8, 4, 2};
 //  jit.autotune(src, benchmark);
   jit.add_module(src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");
   std::cout << benchmark(kernel, info) << std::endl;
   stream->read(dc, true, 0, hc);
-  simple_gemm<float,false,true>(rc, ha, hb, M, N, K);
+  simple_gemm<float,false,false>(rc, ha, hb, M, N, K);
   for(size_t i = 0; i < M*N; i++)
     if(std::abs(hc[i] - rc[i])/std::max(hc[i], rc[i]) > 1e-4){
       std::cout << i << " " << hc[i] << " " << rc[i] << std::endl;

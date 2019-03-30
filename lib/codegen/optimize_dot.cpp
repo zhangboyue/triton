@@ -31,7 +31,6 @@ void optimize_dot::run(ir::module &mod) {
       dot->replace_all_uses_with(NT);
       to_delete.push_back((ir::instruction*)B);
       to_delete.push_back(dot);
-//      params_->copy(NT, dot);
     }
     // dot(op(a), b)
     if(!is_trans(B)){
@@ -39,7 +38,6 @@ void optimize_dot::run(ir::module &mod) {
       ir::instruction *NT = builder.insert(ir::dot_inst::create_nt(A, BT, D));
       dot->replace_all_uses_with(NT);
       to_delete.push_back(dot);
-//      params_->copy(NT, dot);
     }
   }
 
