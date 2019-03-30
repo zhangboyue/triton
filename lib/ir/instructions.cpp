@@ -28,6 +28,8 @@ instruction::instruction(type *ty, unsigned num_ops, unsigned num_results, const
 
 void instruction::erase_from_parent() {
   parent_->erase(this);
+  for(ir::value* op: ops())
+    op->erase_use(this);
 }
 
 bool instruction::has_tile_result_or_op() {

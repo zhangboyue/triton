@@ -103,6 +103,7 @@ void jit::autotune(const std::string &src, benchmark_t benchmark) {
   ir::module &tt_module = *ptt_module;
   // set parameters
   passes_wrapper passes(target_.get());
+  passes.pre_tune(tt_module);
   passes.tune.run(tt_module);
   auto mps = passes.tune.get_params(tt_module);
   // create parameter ranges
@@ -117,6 +118,7 @@ void jit::autotune(const std::string &src, benchmark_t benchmark) {
     i = 0;
     for(ir::metaparameter *mp: mps)
       mp->set_value(params[i++]);
+    passes.pre_tune(tt_module);
     passes.tune.init(tt_module);
     if(!passes.tune.check_constraints(errors))
       return;
@@ -156,6 +158,7 @@ void jit::autotune(const std::string &src, benchmark_t benchmark) {
 void jit::add_module(ir::module &tt_module, const std::vector<unsigned> &params) {
   // set parameters
   passes_wrapper passes(target_.get());
+  passes.pre_tune(tt_module);
   passes.tune.run(tt_module);
   unsigned i = 0;
   for(ir::metaparameter* mp: passes.tune.get_params(tt_module))

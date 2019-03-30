@@ -494,7 +494,7 @@ public:
 
 private:
   dot_inst(value *A, value *B, value *C, TransT AT, TransT BT, const std::string &name, instruction *next);
-  std::string repr_impl() const { return "dot"; }
+  std::string repr_impl() const { return std::string("dot.") + ((AT_==NoTrans)?"n":"t") + ((BT_==NoTrans)?"n":"t"); }
 
 public:
   static instruction* create_nn(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);

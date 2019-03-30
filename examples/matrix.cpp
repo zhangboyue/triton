@@ -21,29 +21,46 @@ void matmul(restrict read_only fp32 *A,
   fp32 c[TM, TN] = 0;
   fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
   fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
+  fp32 a[TM, TK] = *pa;
+  fp32 b[TN, TK] = *pb;
   for(int32 k = K; k > 0;){
-    fp32 a[TM, TK] = *pa;
-    fp32 b[TN, TK] = *pb;
     c = dot(a, trans(b), c);
     pa = pa + TK*M;
     pb = pb + TK*K;
     k = k - TK;
+    int1 checka[TM, TK] = k > bound;
+    int1 checkb[TN, TK] = k > bound;
+    @checka a = *pa;
+    @checkb b = *pb;
+    if(k > bound)
+      continue;
+    int1 checka0[TM] = rxa < M;
+    int1 checka1[TK] = rka < k;
+    int1 checkb0[TN] = ryb < N;
+    int1 checkb1[TK] = rkb < k;
+    checka = checka0[:, newaxis] && checka1[newaxis, :];
+    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
+    a = checka ? *pa : 0;
+    b = checkb ? *pb : 0;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
   fp32* pc[TM, TN] = C + ryc[newaxis, :]*M + rxc[:, newaxis];
-  *pc = c;
+  int1 checkc0[TM] = rxc < M;
+  int1 checkc1[TN] = ryc < N;
+  int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
+  @checkc *pc = c;
 }
 )";
 
 
-template<class T>
+template<class T, bool AT, bool BT>
 void simple_gemm(std::vector<T> &c, const std::vector<T> &a, const std::vector<T> &b, size_t M, size_t N, size_t K){
   for(size_t m = 0; m < M; m++)
   for(size_t n = 0; n < N; n++){
     T acc = 0;
     for(size_t k = 0; k < K; k++)
-      acc += a[m + k*M] * b[n + k*N];
+      acc += (AT?a[k + m*K]:a[m + k*M]) * (BT?b[n + k*N]:b[k + n*K]);
     c[m + n*M] = acc;
   }
 }
@@ -168,14 +185,14 @@ int main() {
     8, 8,
     4
   };
-
+//  params = {8, 2, 16, 16, 64, 8, 8, 2, 4, 8, 8, 4, 2};
 //  jit.autotune(src, benchmark);
   jit.add_module(src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");
   std::cout << benchmark(kernel, info) << std::endl;
   stream->read(dc, true, 0, hc);
-  simple_gemm(rc, ha, hb, M, N, K);
+  simple_gemm<float,false,true>(rc, ha, hb, M, N, K);
   for(size_t i = 0; i < M*N; i++)
     if(std::abs(hc[i] - rc[i])/std::max(hc[i], rc[i]) > 1e-4){
       std::cout << i << " " << hc[i] << " " << rc[i] << std::endl;

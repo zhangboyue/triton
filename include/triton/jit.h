@@ -10,6 +10,7 @@
 #include "triton/driver/kernel.h"
 #include "triton/codegen/selection.h"
 #include "triton/codegen/tune.h"
+#include "triton/codegen/optimize_dot.h"
 #include "triton/codegen/shmem_allocation.h"
 #include "triton/codegen/shmem_liveness.h"
 #include "triton/codegen/shmem_info.h"
@@ -49,7 +50,12 @@ public:
                       shmem_barriers(&shmem_allocation, &shmem_info),
                       vectorize(&tune),
                       selection(&shmem_allocation, &tune, &shmem_info, target),
+                      optimize_dot(&tune),
                       target_(target) { }
+
+    void pre_tune(ir::module &module) {
+        optimize_dot.run(module);
+    }
 
     void init(ir::module &module) {
       if(target_->is_gpu()){
@@ -58,7 +64,7 @@ public:
         shmem_allocation.run();
         shmem_barriers.run(module);
       }
-//      vectorize.run(module);
+      vectorize.run(module);
       ir::print(module, std::cout);
     }
 
@@ -69,6 +75,7 @@ public:
     codegen::shmem_barriers shmem_barriers;
     codegen::vectorize vectorize;
     codegen::selection selection;
+    codegen::optimize_dot optimize_dot;
     codegen::target* target_;
   };
 
