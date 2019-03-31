@@ -25,7 +25,7 @@ void shift(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
   int32 rkb[TK] = 0 ... TK;
   fp32 C[TM, TN] = 0;
   fp32* pxa[TM, TK] = a + rxa[:, newaxis];
-  fp32* pb[TN, TK] = b + rkb[newaxis, :]*K + ryb[:, newaxis];
+  fp32* pb[TN, TK] = b + rkb[newaxis, :]*N + ryb[:, newaxis];
   __constant__ int32* pd[TK] = delta + rka;
   for(int32 k = K; k > 0; k = k - TK){
     int32 delta[TK] = *pd;
@@ -33,7 +33,7 @@ void shift(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
     fp32 a[TM, TK] = *pa;
     fp32 b[TN, TK] = *pb;
     C = dot(a, trans(b), C);
-    pb = pb + TK*K;
+    pb = pb + TK*N;
     pd = pd + TK;
   }
   int32 rxc[TM] = get_global_range[TM](0);
@@ -68,33 +68,44 @@ int main() {
   // initialize just-in-time compiler
   triton::jit jit(context);
   // initialization
-  int32_t BS = 1, F = 32;
-  int32_t H = 24, W = 240;
-  int32_t C = 64;
+  int32_t R = 3, S = 3;
+  int32_t BS = 4, F = 128;
+  int32_t H = 32 + R/2, W = 32 + S/2;
+  int32_t C = 128;
   // equivalent matmul dimensions
   int32_t M = BS*H*W;
   int32_t N = F;
   int32_t K = C;
+  std::cout << M << " " << N << " " << K << std::endl;
   std::vector<float> hc(BS*H*W*F);
   std::vector<float> rc(BS*H*W*F);
   std::vector<float> ha(BS*C*H*W);
-  std::vector<float> hb(C*F);
+  std::vector<float> hb(F*C);
   // strides
-  int32_t stride_i_n = 1;
-  int32_t stride_i_w = N*stride_i_n;
+  int32_t stride_i_bs = 1;
+  int32_t stride_i_w = BS*stride_i_bs;
   int32_t stride_i_h = W*stride_i_w;
   int32_t stride_i_c = H*stride_i_h;
   // random shifts
   std::vector<int32_t> shift_h(C);
   std::vector<int32_t> shift_w(C);
   for(int32_t c = 0; c < C; c++){
-    shift_h[c] = 0;
-    shift_w[c] = 0;
+    shift_h[c] = rand() % R - R/2;
+    shift_w[c] = rand() % S - S/2;
   }
   // initialize buffers
   srand(0);
-  for(size_t i = 0; i < ha.size(); i++)
-    ha[i] = (float)rand()/RAND_MAX;
+  for(int c = 0 ; c < C; c++)
+  for(int h = 0 ; h < H; h++)
+  for(int w = 0 ; w < W; w++)
+  for(int bs = 0 ; bs < BS; bs++){
+    float value = (float)rand()/RAND_MAX;
+    if(h < R/2 ||  h >= H - R/2
+       || w < S/2 || w >= W - S/2)
+      value = 0;
+    size_t idx = bs + w*stride_i_w + h*stride_i_h + c*stride_i_c;
+    ha[idx] = value;
+  }
   for(size_t i = 0; i < hb.size(); i++)
     hb[i] = (float)rand()/RAND_MAX;
   for(size_t i = 0; i < hc.size(); i++)
@@ -108,7 +119,6 @@ int main() {
   stream->write(dc, true, 0, hc);
   stream->synchronize();
   std::vector<int32_t> h_delta = shift_deltas(8, stride_i_w, stride_i_h, stride_i_c, C, shift_h, shift_w);
-
   // benchmark a given matrix multiplication kernel
   auto benchmark = [&](triton::driver::kernel* kernel,
                        triton::jit::launch_information info) {
@@ -147,9 +157,18 @@ int main() {
     8, 8,
     4
   };
+  jit.autotune("shift", src, benchmark);
   jit.add_module("shift", src, params);
   triton::driver::kernel* kernel = jit.get_function("shift");
   triton::jit::launch_information info = jit.get_launch_info("shift");
   std::cout << "Performance: " << benchmark(kernel, info) << " TFLOPS " << std::endl;
+  stream->read(dc, true, 0, hc);
+  shift_conv(C, H, W, BS, F, rc, ha, hb, shift_h, shift_w);
+  for(size_t i = 0; i < M*N; i++)
+    if(std::abs(hc[i] - rc[i])/std::max(hc[i], rc[i]) > 1e-4){
+      std::cout << i << " " << hc[i] << " " << rc[i] << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  std::cout << "Pass!" << std::endl;
 
 }
