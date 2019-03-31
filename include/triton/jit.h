@@ -89,13 +89,13 @@ public:
 private:
   std::string compute_data_layout(bool is_64bit = true, bool use_short_pointers = true);
   std::unique_ptr<llvm::Module> make_llvm_module(triton::ir::module &module, passes_wrapper &passes);
-  std::unique_ptr<ir::module> make_triton_module(const std::string &src);
+  std::unique_ptr<ir::module> make_triton_module(const std::string &name, const std::string &src);
 
 public:
   jit(driver::context* context);
-  void autotune(const std::string &src, benchmark_t benchmark);
+  void autotune(const std::string &name, const std::string &src, benchmark_t benchmark);
   void add_module(ir::module &module, const std::vector<unsigned>& params = {});
-  void add_module(const std::string &src, const std::vector<unsigned>& params = {});
+  void add_module(const std::string &name, const std::string &src, const std::vector<unsigned>& params = {});
   driver::kernel* get_function(const std::string &name);
   launch_information get_launch_info(const std::string &name);
   unsigned get_int(const std::string &name);

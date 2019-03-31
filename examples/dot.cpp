@@ -114,8 +114,8 @@ int main() {
     8, 8,
     4
   };
-  jit.autotune(src, benchmark);
-  jit.add_module(src, params);
+  jit.autotune("matmul",src, benchmark);
+  jit.add_module("matmul", src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");
   std::cout << "Performance: " << benchmark(kernel, info) << " TFLOPS " << std::endl;

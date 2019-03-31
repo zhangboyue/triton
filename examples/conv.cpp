@@ -13,7 +13,7 @@ const tunable int32 TK = {8};
 
 __constant__ int32* delta = alloc_const int32[18];
 
-void matmul(read_only restrict fp32 *a,
+void conv(read_only restrict fp32 *a,
           read_only restrict fp32 *b,
           fp32 *c,
           int32 M, int32 N, int32 K,
@@ -208,10 +208,10 @@ int main() {
     8, 8,
     4
   };
-//  jit.autotune(src, benchmark);
-  jit.add_module(src, params);
-  triton::driver::kernel* kernel = jit.get_function("matmul");
-  triton::jit::launch_information info = jit.get_launch_info("matmul");
+  jit.autotune("conv", src, benchmark);
+  jit.add_module("conv", src, params);
+  triton::driver::kernel* kernel = jit.get_function("conv");
+  triton::jit::launch_information info = jit.get_launch_info("conv");
   std::cout << "Performance: " << benchmark(kernel, info) << " TFLOPS " << std::endl;
   stream->read(dc, true, 0, hc);
   cpp_conv_nchw(BC, AN, CK, AD, AH, AW, BT, BR, BS, pad_d, pad_h, pad_w, stride_d, stride_h, stride_w, CM, CP, CQ, rc, ha, hb);
