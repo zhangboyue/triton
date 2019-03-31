@@ -1,4 +1,4 @@
-foreach(PROG dot conv)
+foreach(PROG dot conv shift)
      add_executable(${PROG} ${PROG}.cpp)
      set_target_properties(${PROG} PROPERTIES OUTPUT_NAME ${PROG})
      include_directories(/usr/local/cuda/include/)

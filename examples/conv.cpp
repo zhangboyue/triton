@@ -92,7 +92,7 @@ int main() {
   // initialization
   int32_t AN = 4, CK = 32;
   int32_t AD = 1, AH = 24, AW = 240;
-  int32_t BC = 16, BT = 1, BR = 3, BS = 3;
+  int32_t BC = 64, BT = 1, BR = 3, BS = 3;
   int32_t pad_d = 0, pad_h = 0, pad_w = 0;
   int32_t stride_d = 1, stride_h = 1, stride_w = 1;
   int32_t upsample_d = 1, upsample_h = 1, upsample_w = 1;
@@ -208,7 +208,7 @@ int main() {
     8, 8,
     4
   };
-  jit.autotune("conv", src, benchmark);
+//  jit.autotune("conv", src, benchmark);
   jit.add_module("conv", src, params);
   triton::driver::kernel* kernel = jit.get_function("conv");
   triton::jit::launch_information info = jit.get_launch_info("conv");

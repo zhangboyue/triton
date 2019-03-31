@@ -5,28 +5,36 @@
 #include "triton/driver/backend.h"
 #include "triton/driver/stream.h"
 
+// K = channels
+// M = batch * height * width
+// N = number of feature maps
+
 const char* src =
 R"(
 const tunable int32 TM = {16, 32, 64, 128};
 const tunable int32 TN = {16, 32, 64, 128};
 const tunable int32 TK = {8};
 
-void matmul(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
-           int32 M, int32 N, int32 K, int32 bound,
-           int32 *depth, int32 *delta){
+__constant__ int32* delta = alloc_const int32[256];
+
+void shift(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
+           int32 M, int32 N, int32 K){
   int32 rxa[TM] = get_global_range[TM](0);
   int32 ryb[TN] = get_global_range[TN](1);
   int32 rka[TK] = 0 ... TK;
   int32 rkb[TK] = 0 ... TK;
   fp32 C[TM, TN] = 0;
-  fp32* pa[TM, TK] = a + rka[newaxis, :]*M + rxa[:, newaxis];
+  fp32* pxa[TM, TK] = a + rxa[:, newaxis];
   fp32* pb[TN, TK] = b + rkb[newaxis, :]*K + ryb[:, newaxis];
+  __constant__ int32* pd[TK] = delta + rka;
   for(int32 k = K; k > 0; k = k - TK){
+    int32 delta[TK] = *pd;
+    fp32 *pa[TM, TK] = pxa + delta[newaxis, :];
     fp32 a[TM, TK] = *pa;
     fp32 b[TN, TK] = *pb;
     C = dot(a, trans(b), C);
-    pa = pa + TK*M;
     pb = pb + TK*K;
+    pd = pd + TK;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
@@ -38,17 +46,52 @@ void matmul(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
 }
 )";
 
+std::vector<int32_t> shift_deltas(int32_t TK,
+                                  // strides
+                                  int32_t stride_w, int32_t stride_h, int32_t stride_c,
+                                  // shift
+                                  int32_t C,
+                                  const std::vector<int32_t>& shift_h,
+                                  const std::vector<int32_t>& shift_w) {
+  std::vector<int32_t> res(C);
+  for(unsigned c = 0; c < C; c++){
+    res[c] = c*stride_c;
+    res[c] += shift_h[c]*stride_h;
+    res[c] += shift_w[c]*stride_w;
+  }
+  return res;
+}
+
 int main() {
   // initialize default compute device
   auto context = triton::driver::backend::contexts::get_default();
+  // initialize just-in-time compiler
   triton::jit jit(context);
-
-  // matrix multiplication parameters
-  int32_t M = 1024, N = 1024, K = 1024;
-  std::vector<float> hc(M*N);
-  std::vector<float> rc(M*N);
-  std::vector<float> ha(M*K);
-  std::vector<float> hb(K*N);
+  // initialization
+  int32_t BS = 1, F = 32;
+  int32_t H = 24, W = 240;
+  int32_t C = 64;
+  // equivalent matmul dimensions
+  int32_t M = BS*H*W;
+  int32_t N = F;
+  int32_t K = C;
+  std::vector<float> hc(BS*H*W*F);
+  std::vector<float> rc(BS*H*W*F);
+  std::vector<float> ha(BS*C*H*W);
+  std::vector<float> hb(C*F);
+  // strides
+  int32_t stride_i_n = 1;
+  int32_t stride_i_w = N*stride_i_n;
+  int32_t stride_i_h = W*stride_i_w;
+  int32_t stride_i_c = H*stride_i_h;
+  // random shifts
+  std::vector<int32_t> shift_h(C);
+  std::vector<int32_t> shift_w(C);
+  for(int32_t c = 0; c < C; c++){
+    shift_h[c] = 0;
+    shift_w[c] = 0;
+  }
+  // initialize buffers
   srand(0);
   for(size_t i = 0; i < ha.size(); i++)
     ha[i] = (float)rand()/RAND_MAX;
@@ -64,7 +107,7 @@ int main() {
   stream->write(db, true, 0, hb);
   stream->write(dc, true, 0, hc);
   stream->synchronize();
-
+  std::vector<int32_t> h_delta = shift_deltas(8, stride_i_w, stride_i_h, stride_i_c, C, shift_h, shift_w);
 
   // benchmark a given matrix multiplication kernel
   auto benchmark = [&](triton::driver::kernel* kernel,
@@ -73,17 +116,10 @@ int main() {
     unsigned TM = info.global_range_size[0];
     unsigned TN = info.global_range_size[1];
     unsigned nthreads = info.num_threads;
-    std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, 1};
-    // fast bounds-checking
-    unsigned TK = jit.get_int("TK");
-    unsigned lasti = (grid[0]*TM - 1)*TM + TM - 1;
-    unsigned lastj = (grid[1]*TN - 1)*TN + TN - 1;
-    unsigned lastk = TK - 1;
-    bool AT = false;
-    bool BT = true;
-    unsigned last_safe_a = (AT==false)?(M*K - 1 - lasti)/M - lastk : M*K - 1 - lasti*K - lastk;
-    unsigned last_safe_b =  (BT==true)?(N*K - 1 - lastj)/N - lastk : N*K - 1 - lastj*K - lastk;
-    int32_t bound = std::max<unsigned>(1, std::max(K - last_safe_a, K - last_safe_b));
+    // initialize constant memory
+    triton::driver::buffer* delta = jit.get_buffer("delta");
+    stream->write(delta, false, 0, h_delta.size()*4, h_delta.data());
+    stream->synchronize();
     // set argument
     kernel->setArg(0, da);
     kernel->setArg(1, db);
@@ -91,8 +127,8 @@ int main() {
     kernel->setArg(3, M);
     kernel->setArg(4, N);
     kernel->setArg(5, K);
-    kernel->setArg(6, bound);
     // dry run
+    std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, 1};
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
     stream->synchronize();
     // benchmark
@@ -103,8 +139,7 @@ int main() {
     return tflops;
   };
 
-
-  // just-in-time compile source-code
+  // shift
   std::vector<unsigned> params = {
     16, 2, 64,
     32, 2, 64,
@@ -112,17 +147,9 @@ int main() {
     8, 8,
     4
   };
-  jit.autotune(src, benchmark);
-  jit.add_module(src, params);
-  triton::driver::kernel* kernel = jit.get_function("matmul");
-  triton::jit::launch_information info = jit.get_launch_info("matmul");
+  jit.add_module("shift", src, params);
+  triton::driver::kernel* kernel = jit.get_function("shift");
+  triton::jit::launch_information info = jit.get_launch_info("shift");
   std::cout << "Performance: " << benchmark(kernel, info) << " TFLOPS " << std::endl;
-  stream->read(dc, true, 0, hc);
-  simple_gemm<float,false,true>(rc, ha, hb, M, N, K);
-  for(size_t i = 0; i < M*N; i++)
-    if(std::abs(hc[i] - rc[i])/std::max(hc[i], rc[i]) > 1e-4){
-      std::cout << i << " " << hc[i] << " " << rc[i] << std::endl;
-      exit(EXIT_FAILURE);
-    }
-  std::cout << "Pass!" << std::endl;
+
 }
