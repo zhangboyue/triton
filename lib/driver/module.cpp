@@ -268,11 +268,11 @@ cu_module::cu_module(driver::context * context, std::string const & source) : mo
   }
 }
 
-cu_buffer cu_module::symbol(const char *name) const{
+cu_buffer* cu_module::symbol(const char *name) const{
   CUdeviceptr handle;
   size_t size;
   dispatch::cuModuleGetGlobal_v2(&handle, &size, *cu_, name);
-  return cu_buffer(ctx_, handle, false);
+  return new cu_buffer(ctx_, handle, false);
 }
 
 

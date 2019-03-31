@@ -205,4 +205,9 @@ unsigned jit::get_int(const std::string &name){
   return global_ints_.at(name);
 }
 
+driver::buffer *jit::get_buffer(const std::string &name){
+  driver::cu_module *mod = (driver::cu_module*)modules_.front();
+  return mod->symbol(name.c_str());
+}
+
 }

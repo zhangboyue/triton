@@ -59,3 +59,168 @@ double bench(OP const & op, SYNC const & sync, triton::driver::device const & de
   }
   return min(times);
 }
+
+//
+
+std::vector<int> build_conv_lut(int TK, int stride_d, int stride_h, int stride_w, int stride_c, int T, int R, int S) {
+  /* convolution parameters */
+  int F = T * R * S;
+  int Nlut = (TK + F - 1) / F * F;
+  int upsample_w = 1;
+  int upsample_h = 1;
+  int upsample_d = 1;
+  std::vector<int> res(2 * Nlut);
+  /* unpack index wrt filters */
+  auto unpack = [&](int32_t trs){
+    int32_t tr = trs / S;
+    int32_t s = trs - tr*S;
+    int32_t t = tr / R;
+    int32_t r = tr - t*R;
+    return std::make_tuple(t, r, s);
+  };
+  /* increments */
+  for(size_t i = 0; i < Nlut; ++i)
+    res[i] = (((i + TK) % Nlut) - i);
+  /* deltas */
+  size_t Ds0 = Nlut;
+  size_t Ds1 = upsample_w;
+  size_t Ds2 = upsample_h;
+  size_t Ds3 = upsample_d;
+  for(size_t pd = 0; pd < Ds3; ++pd)
+  for(size_t ph = 0; ph < Ds2; ++ph)
+  for(size_t pw = 0; pw < Ds1; ++pw){
+    int32_t* deltas_ptr = &res[Nlut + pw*Ds0 + ph*Ds0*Ds1 + pd*Ds0*Ds1*Ds2];
+    // cumulative increments
+    for(size_t i = 0; i < Ds0; ++i){
+      int32_t ctrs = i;
+      int32_t c = ctrs / F;
+      int32_t t, r, s;
+      std::tie(t, r, s) = unpack(ctrs % F);
+      // next indices
+      int32_t nextctrs = ctrs + TK;
+      int32_t nextc = nextctrs / F;
+      int32_t nextt, nextr, nexts;
+      std::tie(nextt, nextr, nexts) = unpack(nextctrs % F);
+      // diffs
+      int32_t cdiff = nextc - c;
+      int32_t tdiff = (nextt + pd)/upsample_d - (t + pd)/upsample_d;
+      int32_t rdiff = (nextr + ph)/upsample_h - (r + ph)/upsample_h;
+      int32_t sdiff = (nexts + pw)/upsample_w - (s + pw)/upsample_w;
+      // delta pointers
+      deltas_ptr[i] = cdiff*stride_c + sdiff*stride_w + rdiff*stride_h + tdiff*stride_d;
+    }
+  }
+  return res;
+}
+
+
+// Index computation
+inline int32_t idx(int32_t x, int32_t y, int32_t z, int32_t w, int32_t u,
+                   int32_t /*s0*/, int32_t s1, int32_t s2, int32_t s3, int32_t s4)
+{ return u + w*s4 + z*s4*s3 + y*s4*s3*s2 + x*s4*s3*s2*s1; }
+
+
+// Pack
+
+template <class T> T clamp(T x, T lo, T hi){
+  return std::max<T>(lo, std::min<T>(x, hi));
+}
+
+
+template<class T, class U>
+T pack(U* tmp, U scale);
+
+template<>
+double pack<double, double>(double* tmp, double scale)
+{ return tmp[0]*scale; }
+
+template<>
+float pack<float, float>(float* tmp, float scale)
+{ return tmp[0]*scale; }
+
+template<>
+int pack<int, float>(float* tmp, float scale)
+{
+  int res = 0;
+  for(int i = 0; i < 4; i++){
+    int8_t clamped = std::round(clamp(tmp[i]*scale, (float)-128, (float)127));
+    res |= (clamped & 0xFF) << (8*i);
+  }
+  return res;
+}
+
+template<class T> struct pack_increment
+{ enum{ VALUE = 1}; };
+
+template<> struct pack_increment<int>
+{ enum{ VALUE = 4}; };
+
+// Dot
+template<class T>
+inline T dot(T x, T y, T z)
+{
+  return std::fma(x, y, z);
+}
+
+inline int dot(int x, int y, int z){
+  int res = 0;
+  for(int i = 0; i < 4; i++){
+    int32_t a = ((x >> (8*i)) & 0x000000FF);
+    int32_t b = ((y >> (8*i)) & 0x000000FF);
+    res +=  (*(int8_t*)(&a)) * (*(int8_t*)(&b));
+  }
+  return res + z;
+}
+
+
+
+template<class IN_DTYPE, class OUT_DTYPE>
+void cpp_conv_nchw(int32_t C, int32_t N, int32_t K,
+              int32_t D, int32_t H, int32_t W,
+              int32_t T, int32_t R, int32_t S,
+              int32_t pad_d, int32_t pad_h, int32_t pad_w,
+              int32_t stride_d, int32_t stride_h, int32_t stride_w,
+              int32_t M, int32_t P, int32_t Q,
+              std::vector<OUT_DTYPE>& O,
+              const std::vector<IN_DTYPE>& I,
+              const std::vector<IN_DTYPE>& F)
+{
+  static const int PACK_IN = pack_increment<IN_DTYPE>::VALUE;
+  static const int PACK_OUT = pack_increment<OUT_DTYPE>::VALUE;
+  if(C % PACK_IN != 0) throw std::runtime_error("Number of input channels must be a multiple of 4");
+  if(K % PACK_OUT != 0) throw std::runtime_error("Number of output channels must be a multiple of 4");
+  C /= PACK_IN;
+  K /= PACK_OUT;
+  int32_t Kout = K;
+  IN_DTYPE accs[PACK_OUT];
+  float tmp[PACK_OUT];
+  for(int32_t m = 0 ; m < M; ++m)
+  for(int32_t p = 0 ; p < P; ++p)
+  for(int32_t q = 0; q < Q; ++q)
+  for(int32_t n = 0; n < N; ++n)
+  for(int32_t k = 0; k < Kout ; ++k)
+  {
+    for(int32_t i = 0; i < PACK_OUT; ++i)
+      accs[i] = 0;
+    int32_t mm = m*stride_d - pad_d;
+    int32_t pp = p*stride_h - pad_h;
+    int32_t qq = q*stride_w - pad_w;
+    for(int32_t kk = 0; kk < PACK_OUT; ++kk)
+    for(int32_t c = 0; c < C; ++c)
+    for(int32_t t = 0; t < T; ++t)
+    for(int32_t r = 0; r < R; ++r)
+    for(int32_t s = 0; s < S; ++s){
+      int32_t d = mm + t;
+      int32_t h = pp + r;
+      int32_t w = qq + s;
+      bool in_bounds = (d >= 0 && h >= 0 && w >= 0 && d < D && h < H && w < W);
+      IN_DTYPE i = in_bounds?I[idx(n, c, d, h, w, N, C, D, H, W)]:0;
+      IN_DTYPE f = F[idx(c, t, r, s, k*PACK_OUT + kk, C, T, R, S, K*PACK_OUT)];
+      accs[kk] = dot(i, f, accs[kk]);
+    }
+    for(int32_t kk = 0; kk < PACK_OUT; ++kk){
+      tmp[kk] = accs[kk];
+    }
+    O[idx(n, k, m, p, q, N, K, M, P, Q)] = tmp[0];
+  }
+}

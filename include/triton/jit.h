@@ -59,7 +59,6 @@ public:
 
     void target_independent(ir::module &module) {
         optimize_dot.run(module);
-//        optimize_cse.run(module);
         optimize_trans.run(module);
     }
 
@@ -100,6 +99,7 @@ public:
   driver::kernel* get_function(const std::string &name);
   launch_information get_launch_info(const std::string &name);
   unsigned get_int(const std::string &name);
+  driver::buffer *get_buffer(const std::string &name);
 
 private:
   std::vector<driver::module*> modules_;
