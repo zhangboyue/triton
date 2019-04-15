@@ -309,7 +309,9 @@ Instruction *selection::llvm_inst(ir::instruction *inst, std::function<Value*(ir
   }
   if(ir::load_inst* ii = dynamic_cast<ir::load_inst*>(inst)){
     Value *ptr = value(ii->get_pointer_operand());
-    return builder.Insert(new LoadInst(ptr));
+    LoadInst *result = new LoadInst(ptr);
+//    result->setAlignment(16);
+    return builder.Insert(result);
   }
   // unknown instruction
   throw std::runtime_error("unknown conversion from ir::instruction to Instruction");
@@ -604,7 +606,9 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
     tile *value = tmap_.at(x->get_value_operand());
     ptr->for_each([&](indices_t idx){
       set_mask_insert_pt(idx);
-      builder.CreateStore(value->get_value(idx), ptr->get_value(idx));
+      StoreInst *store = new StoreInst(value->get_value(idx), ptr->get_value(idx));
+//      store->setAlignment(16);
+      builder.Insert(store);
     });
   }
   else {
@@ -932,8 +936,9 @@ void selection::run(ir::module &src, Module &dst) {
             });
           }
           else {
-            PHINode *llvm_phi = (PHINode*)vmap_.at(phi);
-            Value *llvm_inc_val = vmap_.at(inc_val);
+            std::cout << phi->get_name() << std::endl;
+            PHINode *llvm_phi = (PHINode*)llvm_value(phi, dst_builder);
+            Value *llvm_inc_val = llvm_value(inc_val, dst_builder);
             llvm_phi->addIncoming(llvm_inc_val, llvm_inc_block);
           }
         }

@@ -22,33 +22,17 @@ void matmul(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
   fp32* pb[TN, TK] = b + rkb[newaxis, :]*K + ryb[:, newaxis];
   fp32 a[TM, TK] = *pa;
   fp32 b[TN, TK] = *pb;
-  for(int32 k = K; k > 0;){
+  for(int32 k = 0; k < K - TK; k = k + TK){
     C = dot(a, trans(b), C);
     pa = pa + TK*M;
     pb = pb + TK*K;
-    k = k - TK;
-    int1 checka[TM, TK] = k > bound;
-    int1 checkb[TN, TK] = k > bound;
-    @checka a = *pa;
-    @checkb b = *pb;
-    if(k > bound)
-      continue;
-    int1 checka0[TM] = rxa < M;
-    int1 checka1[TK] = rka < k;
-    int1 checkb0[TN] = ryb < N;
-    int1 checkb1[TK] = rkb < k;
-    checka = checka0[:, newaxis] && checka1[newaxis, :];
-    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
-    a = checka ? *pa : 0;
-    b = checkb ? *pb : 0;
+    a = *pa;
+    b = *pb;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
   fp32* pc[TM, TN] = c + ryc[newaxis, :]*M + rxc[:, newaxis];
-  int1 checkc0[TM] = rxc < M;
-  int1 checkc1[TN] = ryc < N;
-  int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
-  @checkc *pc = C;
+  *pc = C;
 }
 )";
 
@@ -58,7 +42,7 @@ int main() {
   triton::jit jit(context);
 
   // matrix multiplication parameters
-  int32_t M = 1024, N = 1024, K = 1024;
+  int32_t M = 512, N = 512, K = 512;
   std::vector<float> hc(M*N);
   std::vector<float> rc(M*N);
   std::vector<float> ha(M*K);
@@ -126,7 +110,7 @@ int main() {
     8, 8,
     4
   };
-  jit.autotune("matmul",src, benchmark);
+//  jit.autotune("matmul",src, benchmark);
   jit.add_module("matmul", src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");

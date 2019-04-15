@@ -53,8 +53,6 @@ using triton::ast::return_void;
 L?'(\\.|[^\\'])+'      	{ return return_impl(CONSTANT, yytext); }
 
 {D}+{E}{FS}?		        { return return_impl(CONSTANT, yytext); }
-{D}*"."{D}+({E})?{FS}?	{ return return_impl(CONSTANT, yytext); }
-{D}+"."{D}*({E})?{FS}?	{ return return_impl(CONSTANT, yytext); }
 
 L?\"(\\.|[^\\"])*\"	    { return return_impl(STRING_LITERAL, yytext); }
 
