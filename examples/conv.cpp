@@ -43,7 +43,7 @@ void conv(read_only restrict fp32 *a,
     fp32 a[TM, TK] = *pa;
     fp32 b[TN, TK] = *pb;
     __constant__ int32* pincd[TK] = delta + rka;
-    __constant__ int32* pd[TK] = delta + 9 + rka;
+    __constant__ int32* pd[TK] = delta + AR*AS + rka;
     int32 d[TK] = *pd;
     int32 incd[TK] = *pincd;
     for(int32 k = K; k > 0;){

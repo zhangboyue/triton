@@ -936,7 +936,6 @@ void selection::run(ir::module &src, Module &dst) {
             });
           }
           else {
-            std::cout << phi->get_name() << std::endl;
             PHINode *llvm_phi = (PHINode*)llvm_value(phi, dst_builder);
             Value *llvm_inc_val = llvm_value(inc_val, dst_builder);
             llvm_phi->addIncoming(llvm_inc_val, llvm_inc_block);
