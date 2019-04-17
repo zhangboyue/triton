@@ -556,6 +556,22 @@ ir::value* matmul_expression::codegen(ir::module *mod) const {
   return mod->get_builder().create_dot(A, B, C);
 }
 
+// min
+ir::value* min_expression::codegen(ir::module *mod) const {
+  ir::value* cmp = binary_operator(LT, (node*)x_, (node*)y_).codegen(mod);
+  ir::value* x = ((ir::cmp_inst*)cmp)->get_operand(0);
+  ir::value* y = ((ir::cmp_inst*)cmp)->get_operand(1);
+  return mod->get_builder().create_select(cmp, x, y);
+}
+
+// max
+ir::value* max_expression::codegen(ir::module *mod) const {
+  ir::value* cmp = binary_operator(GT, (node*)x_, (node*)y_).codegen(mod);
+  ir::value* x = ((ir::cmp_inst*)cmp)->get_operand(0);
+  ir::value* y = ((ir::cmp_inst*)cmp)->get_operand(1);
+  return mod->get_builder().create_select(cmp, x, y);
+}
+
 // Trans
 ir::value* trans_expression::codegen(ir::module *mod) const {
   return mod->get_builder().create_trans(arg_->codegen(mod));

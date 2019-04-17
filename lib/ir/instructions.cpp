@@ -537,6 +537,20 @@ instruction* trans_inst::create(value *arg, const std::string &name, instruction
 }
 
 //===----------------------------------------------------------------------===//
+//                               select instructions
+//===----------------------------------------------------------------------===//
+
+select_inst::select_inst(value *pred, value *if_value, value *else_value, const std::string &name, instruction *next)
+  : builtin_inst(if_value->get_type(), 3, 1, name, next){
+  set_operand(0, pred);
+  set_operand(1, if_value);
+  set_operand(2, else_value);
+}
+
+instruction* select_inst::create(value *pred, value *if_value, value *else_value, const std::string &name, instruction *next) {
+  return new select_inst(pred, if_value, else_value, name, next);
+}
+//===----------------------------------------------------------------------===//
 //                               builtin instructions
 //===----------------------------------------------------------------------===//
 get_global_range_inst::get_global_range_inst(type *ty, unsigned axis,

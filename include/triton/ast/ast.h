@@ -176,10 +176,32 @@ private:
   const expression *C_;
 };
 
+class max_expression: public builtin_expression{
+public:
+  max_expression(node* x, node* y)
+    : x_((expression*)x), y_((expression*)y){ }
+  ir::value* codegen(ir::module *) const;
+
+private:
+  const expression *x_;
+  const expression *y_;
+};
+
+class min_expression: public builtin_expression{
+public:
+  min_expression(node* x, node* y)
+    : x_((expression*)x), y_((expression*)y){ }
+  ir::value* codegen(ir::module *mod) const;
+
+private:
+  const expression *x_;
+  const expression *y_;
+};
+
 class trans_expression: public builtin_expression{
 public:
   trans_expression(node *arg): arg_(arg) {}
-  ir::value* codegen(ir::module *) const;
+  ir::value* codegen(ir::module *mod) const;
 
 private:
   node* arg_;

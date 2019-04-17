@@ -310,8 +310,13 @@ Instruction *selection::llvm_inst(ir::instruction *inst, std::function<Value*(ir
   if(ir::load_inst* ii = dynamic_cast<ir::load_inst*>(inst)){
     Value *ptr = value(ii->get_pointer_operand());
     LoadInst *result = new LoadInst(ptr);
-//    result->setAlignment(16);
     return builder.Insert(result);
+  }
+  if(ir::select_inst* ii = dynamic_cast<ir::select_inst*>(inst)){
+    Value *pred = value(ii->get_operand(0));
+    Value *if_value = value(ii->get_operand(1));
+    Value *else_value = value(ii->get_operand(2));
+    return builder.Insert(SelectInst::Create(pred, if_value, else_value));
   }
   // unknown instruction
   throw std::runtime_error("unknown conversion from ir::instruction to Instruction");

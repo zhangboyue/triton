@@ -62,14 +62,17 @@ double bench(OP const & op, SYNC const & sync, triton::driver::device const & de
 
 //
 
-std::vector<int> build_conv_lut(int TK, int stride_d, int stride_h, int stride_w, int stride_c, int T, int R, int S) {
+void build_conv_lut(int TK,
+                    int stride_d, int stride_h, int stride_w, int stride_c,
+                    int pad_d, int pad_h, int pad_w,
+                    int T, int R, int S,
+                    std::vector<int>& res, std::vector<int>& masks) {
   /* convolution parameters */
   int F = T * R * S;
   int Nlut = (TK + F - 1) / F * F;
   int upsample_w = 1;
   int upsample_h = 1;
   int upsample_d = 1;
-  std::vector<int> res(2 * Nlut);
   /* unpack index wrt filters */
   auto unpack = [&](int32_t trs){
     int32_t tr = trs / S;
@@ -110,7 +113,32 @@ std::vector<int> build_conv_lut(int TK, int stride_d, int stride_h, int stride_w
       deltas_ptr[i] = cdiff*stride_c + sdiff*stride_w + rdiff*stride_h + tdiff*stride_d;
     }
   }
-  return res;
+
+  /* Masks */
+  size_t Ms0 = Nlut;
+  size_t Ms1 = 2*pad_w + 1;
+  size_t Ms2 = 2*pad_h + 1;
+  size_t Ms3 = 2*pad_d + 1;
+
+  for(size_t pd = 0; pd < Ms3; ++pd)
+  for(size_t ph = 0; ph < Ms2; ++ph)
+  for(size_t pw = 0; pw < Ms1; ++pw){
+    int32_t* masks_ptr = &masks[Nlut + pw*Ms0 + ph*Ms0*Ms1 + pd*Ms0*Ms1*Ms2];
+    for(size_t i = 0; i < Ms0; ++i){
+       int32_t t, r, s;
+       int32_t mask = 0x0;
+       for(size_t j = 0; j < TK; ++j){
+         std::tie(t, r, s) = unpack((i + j) % F);
+         bool in_bounds_d = (t + pd) >= pad_d && (t + pd) < (T + pad_d);
+         bool in_bounds_h = (r + ph) >= pad_h && (r + ph) < (R + pad_h);
+         bool in_bounds_w = (s + pw) >= pad_w && (s + pw) < (S + pad_w);
+         mask |= (in_bounds_d && in_bounds_h && in_bounds_w) << j;
+       }
+       masks_ptr[i] = mask;
+    }
+  }
+  for(size_t i = 0; i < Nlut; ++i)
+    masks[i] = 0x0;
 }
 
 

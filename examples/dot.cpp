@@ -23,16 +23,16 @@ void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
   fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
   fp32 a[TM, TK] = *pa;
   fp32 b[TN, TK] = *pb;
-  for(int32 k = 0; k < K - TK; k = k + TK){
+  for(int32 k = K; k > bound; k = k - TK){
     c = dot(a, trans(b), c);
     pa = pa + TK*M;
     pb = pb + TK*K;
     a = *pa;
     b = *pb;
   }
-  for(int32 k = K - TK; k < K; k = k + TK){
-    int1 checka1[TK] = rka + k < K;
-    int1 checkb1[TK] = rkb + k < K;
+  for(int32 k = bound; k > 0; k = k - TK){
+    int1 checka1[TK] = rka < k;
+    int1 checkb1[TK] = rkb < k;
     int1 checka[TM, TK] = checka1[newaxis, :];
     int1 checkb[TN, TK] = checkb1[newaxis, :];
     fp32 a[TM, TK] = checka? *pa : 0;
@@ -89,14 +89,11 @@ int main() {
     std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, 1};
     // fast bounds-checking
     unsigned TK = jit.get_int("TK");
-    unsigned lasti = (grid[0]*TM - 1)*TM + TM - 1;
-    unsigned lastj = (grid[1]*TN - 1)*TN + TN - 1;
-    unsigned lastk = TK - 1;
-    bool AT = false;
-    bool BT = true;
-    unsigned last_safe_a = (AT==false)?(M*K - 1 - lasti)/M - lastk : M*K - 1 - lasti*K - lastk;
-    unsigned last_safe_b =  (BT==true)?(N*K - 1 - lastj)/N - lastk : N*K - 1 - lastj*K - lastk;
-    int32_t bound = std::max<unsigned>(1, std::max(K - last_safe_a, K - last_safe_b));
+    unsigned last_a = ((M*K - 1) - (TM*TK + 1)) / M;
+    unsigned last_b = ((N*K - 1) - (TN*TK + 1)) / N;
+    last_a = last_a / TK * TK;
+    last_b = last_b / TK * TK;
+    int32_t bound = K - std::max<unsigned>(last_a, last_b);
     // set argument
     kernel->setArg(0, da);
     kernel->setArg(1, db);

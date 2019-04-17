@@ -12,6 +12,7 @@ const tunable int32 TN = {16, 32, 64};
 const tunable int32 TK = {8};
 
 __constant__ int32* delta = alloc_const int32[18];
+__constant__ int32* masks = alloc_const int32[1024];
 
 void conv(read_only restrict fp32 *a,
           read_only restrict fp32 *b,
@@ -22,6 +23,7 @@ void conv(read_only restrict fp32 *a,
           int32 AC, int32 AR, int32 AS,
           int32 lda_n, int32 lda_c, int32 lda_h, int32 lda_w,
           int32 ldc_n, int32 ldc_k, int32 ldc_p, int32 ldc_q,
+          int32 pad_h, int32 pad_w,
           int32 bound){
     int32 rxa[TM] = get_global_range[TM](0);
     int32 rb0[TN] = get_global_range[TN](1);
@@ -29,9 +31,9 @@ void conv(read_only restrict fp32 *a,
     int32 rb1[TK] = 0 ... TK;
     fp32 C[TM, TN] = 0;
     int32 ranh[TM] = rxa / CQ;
-    int32 raw[TM] = rxa % CQ;
+    int32 raw[TM] = rxa % CQ - pad_w;
     int32 ran[TM] = ranh / CP;
-    int32 rah[TM] = ranh % CP;
+    int32 rah[TM] = ranh % CP - pad_h;
     int32 ra0[TM] = ran*lda_n + rah*lda_h + raw*lda_w;
     int32 racr[TK] = rka / AS;
     int32 ras[TK] = rka % AS;
@@ -40,35 +42,35 @@ void conv(read_only restrict fp32 *a,
     int32 ra1[TK] = rac*lda_c + rar*lda_h + ras*lda_w;
     fp32* pa[TM, TK] = a + ra1[newaxis, :] + ra0[:, newaxis];
     fp32* pb[TN, TK] = b + rb1[newaxis, :]*CK + rb0[:, newaxis];
-    fp32 a[TM, TK] = *pa;
-    fp32 b[TN, TK] = *pb;
     __constant__ int32* pincd[TK] = delta + rka;
     __constant__ int32* pd[TK] = delta + AR*AS + rka;
     int32 d[TK] = *pd;
     int32 incd[TK] = *pincd;
-    for(int32 k = K; k > 0;){
+    int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + AR - AH, 0);
+    int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + AS - AW, 0);
+    __constant__ int32* pm[TM] = masks + AR*AS + maskw*AR*AS + maskh*AR*AS*(2*pad_w + 1);
+    __constant__ int32* pincm[TM] = delta;
+    int32 incm[TM] = *pincm;
+    int32 checka0[TM] = *pm;
+    int32 checka1[TK] = 1 << rka;
+    int1 checka[TM, TK] = (checka0[:, newaxis] & checka1[newaxis, :]) > 0;
+    fp32 a[TM, TK] = checka ? *pa : 0;
+    fp32 b[TN, TK] = *pb;
+    for(int32 k = K; k > 0; k = k - TK){
       C = dot(a, trans(b), C);
-      k = k - TK;
       pb = pb + TK*CK;
       pa = pa + d[newaxis, :];
-      int1 checka[TM, TK] = k > bound;
-      int1 checkb[TN, TK] = k > bound;
-      @checka a = *pa;
-      @checkb b = *pb;
+      b = *pb;
       pd = pd + incd;
       pincd = pincd + incd;
       d = *pd;
       incd = *pincd;
-      if(k > bound)
-        continue;
-      int1 checka0[TM] = rxa < M;
-      int1 checka1[TK] = rka < k;
-      int1 checkb0[TN] = rb0 < N;
-      int1 checkb1[TK] = rb1 < k;
-      checka = checka0[:, newaxis] && checka1[newaxis, :];
-      checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
+      pm = pm + incm;
+      pincm = pincm + incm;
+      incm = *pincm;
+      checka0 = *pm;
+      checka = (checka0[:, newaxis] & checka1[newaxis, :]) > 0;
       a = checka ? *pa : 0;
-      b = checkb ? *pb : 0;
     }
     int32 rxc[TM] = get_global_range[TM](0);
     int32 rc1[TN] = get_global_range[TN](1);
@@ -93,7 +95,7 @@ int main() {
   int32_t AN = 4, CK = 32;
   int32_t AD = 1, AH = 24, AW = 240;
   int32_t BC = 64, BT = 1, BR = 3, BS = 3;
-  int32_t pad_d = 0, pad_h = 0, pad_w = 0;
+  int32_t pad_d = 0, pad_h = 1, pad_w = 1;
   int32_t stride_d = 1, stride_h = 1, stride_w = 1;
   int32_t upsample_d = 1, upsample_h = 1, upsample_w = 1;
   int32_t CM = (AD*upsample_d - BT + 1 + 2*pad_d + stride_d - 1)/stride_d;
@@ -109,9 +111,9 @@ int main() {
   std::vector<float> hb(BC*BR*BS*CK);
   srand(0);
   for(size_t i = 0; i < ha.size(); i++)
-    ha[i] = (float)rand()/RAND_MAX;
+    ha[i] = 1;
   for(size_t i = 0; i < hb.size(); i++)
-    hb[i] = (float)rand()/RAND_MAX;
+    hb[i] = 1;
   for(size_t i = 0; i < hc.size(); i++)
     hc[i] = 0;
   triton::driver::buffer* dc = triton::driver::buffer::create(context, hc.size()*4);
@@ -140,7 +142,13 @@ int main() {
   int32_t stride_o_m = CP*stride_o_p;
   int32_t stride_o_k = CM*stride_o_m;
   int32_t stride_o_n = CK*stride_o_k;
-  std::vector<int> h_delta = build_conv_lut(8, stride_i_d, stride_i_h, stride_i_w, stride_i_c, BT, BR, BS);
+  // look-up table
+  int TK = 8;
+  int F = BT * BR * BS;
+  int nlut = (TK + F - 1) / F * F;
+  std::vector<int> h_delta(nlut + upsample_d*upsample_h*upsample_w*nlut);
+  std::vector<int> h_masks(nlut + (2*pad_h+1)*(2*pad_w+1)*(2*pad_d+1)*nlut);
+  build_conv_lut(TK, stride_i_d, stride_i_h, stride_i_w, stride_i_c, pad_d, pad_h, pad_w, BT, BR, BS, h_delta, h_masks);
   // benchmark a given convolution kernel
   auto benchmark = [&](triton::driver::kernel* kernel,
                        triton::jit::launch_information info) {
@@ -150,7 +158,9 @@ int main() {
     unsigned TK = jit.get_int("TK");
     // initialize constant memory
     triton::driver::buffer* delta = jit.get_buffer("delta");
+    triton::driver::buffer* masks = jit.get_buffer("masks");
     stream->write(delta, false, 0, h_delta.size()*4, h_delta.data());
+    stream->write(masks, false, 0, h_masks.size()*4, h_masks.data());
     stream->synchronize();
     // launch info
     unsigned nthreads = info.num_threads;
@@ -189,7 +199,9 @@ int main() {
     kernel->setArg(21, stride_o_k);
     kernel->setArg(22, stride_o_p);
     kernel->setArg(23, stride_o_q);
-    kernel->setArg(24, bound);
+    kernel->setArg(24, pad_h);
+    kernel->setArg(25, pad_w);
+    kernel->setArg(26, bound);
     // dry run
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
     stream->synchronize();
