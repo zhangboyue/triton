@@ -95,54 +95,51 @@ void node::implicit_cast(ir::builder &builder, ir::value *&lhs, ir::value *&rhs,
     throw std::runtime_error("unreachable");
 }
 
-void node::implicit_broadcast(ir::module *mod, ir::value *&arg, ir::type *ty) {
-  ir::value *tmp = ir::undef_value::get(ty);
-  implicit_broadcast(mod, arg, tmp);
+void node::implicit_broadcast(ir::module *mod, ir::value *&lhs, ir::value *&rhs) {
+  implicit_broadcast(mod, lhs->get_type(), rhs);
+  implicit_broadcast(mod, rhs->get_type(), lhs);
 }
 
-void node::implicit_broadcast(ir::module *mod, ir::value *&lhs, ir::value *&rhs){
+void node::implicit_broadcast(ir::module *mod, ir::type *dst_ty, ir::value *&src){
   ir::builder &builder = mod->get_builder();
-  ir::type *lhs_ty = lhs->get_type();
-  ir::type *rhs_ty = rhs->get_type();
+  ir::type *src_ty = src->get_type();
   ir::type::tile_shapes_t::value_type one = ir::tile_type::make_one(mod->get_context());
   // Both are scalar
-  if(!lhs_ty->is_tile_ty() && !rhs_ty->is_tile_ty())
+  if(!dst_ty->is_tile_ty() && !src_ty->is_tile_ty())
     return;
-  // One argument is scalar
-  if(lhs_ty->is_tile_ty() ^ rhs_ty->is_tile_ty()){
-    auto &shapes = lhs_ty->is_tile_ty()?lhs_ty->get_tile_shapes():rhs_ty->get_tile_shapes();
-    auto &scalar = lhs_ty->is_tile_ty()?rhs:lhs;
-    scalar = builder.create_splat(scalar, shapes);
+  // Broadcast scalar
+  if(dst_ty->is_tile_ty() && !src_ty->is_tile_ty()){
+    src = builder.create_splat(src, dst_ty->get_tile_shapes());
+    return;
+  }
+  // Downcast tile
+  if(!dst_ty->is_tile_ty() && src_ty->is_tile_ty()){
     return;
   }
   // Both are arrays
-  auto lhs_shapes = lhs->get_type()->get_tile_shapes();
-  auto rhs_shapes = rhs->get_type()->get_tile_shapes();
-  if(lhs_shapes == rhs_shapes)
+  auto dst_shapes = dst_ty->get_tile_shapes();
+  auto src_shapes = src_ty->get_tile_shapes();
+  if(dst_shapes == src_shapes)
     return;
-  int lhs_dim = lhs_shapes.size();
-  int rhs_dim = rhs_shapes.size();
-  auto &shortest = (lhs_dim < rhs_dim)?lhs_shapes:rhs_shapes;
-  auto &longest  = (lhs_dim < rhs_dim)?rhs_shapes:lhs_shapes;
-  size_t ndim = longest.size();
-  int off = longest.size() - shortest.size();
+  int dst_dim = dst_shapes.size();
+  int src_dim = src_shapes.size();
+  if(dst_dim < src_dim)
+    return;
+  int off = dst_dim - src_dim;
   // Pad
   for(size_t i = 0; i < off; i++)
-    shortest.insert(shortest.begin(), one);
-  ir::value *&target = (lhs_dim < rhs_dim)?lhs:rhs;
+    src_shapes.insert(src_shapes.begin(), one);
   if(off > 0)
-    target = builder.create_reshape(target, shortest);
+    src = builder.create_reshape(src, src_shapes);
   // Broadcast
-  for(int i = longest.size() - 1; i>= 0; i--)
-    if(shortest[i] != longest[i] && shortest[i] != one && longest[i] != one)
+  for(int i = dst_dim - 1; i>= 0; i--)
+    if(dst_shapes[i] != src_shapes[i] && dst_shapes[i] != one && src_shapes[i] != one)
       throw std::runtime_error("cannot broadcast");
-  ir::type::tile_shapes_t shapes(ndim);
-  for(size_t i = 0; i < ndim; i++)
-    shapes[i] = shortest[i]==one?longest[i]:shortest[i];
-  if(shapes != lhs_shapes)
-    lhs = builder.create_broadcast(lhs, shapes);
-  if(shapes != rhs_shapes)
-    rhs = builder.create_broadcast(rhs, shapes);
+  ir::type::tile_shapes_t shapes(dst_dim);
+  for(size_t i = 0; i < dst_dim; i++)
+    shapes[i] = src_shapes[i]==one?dst_shapes[i]:src_shapes[i];
+  if(shapes != src_shapes)
+    src = builder.create_broadcast(src, shapes);
 }
 
 /* Helper */
@@ -421,7 +418,7 @@ ir::value* initializer::codegen(ir::module * mod) const{
   else if(expr_){
     value = expr_->codegen(mod);
     value = explicit_cast(mod->get_builder(), value, ty);
-    implicit_broadcast(mod, value, ty);
+    implicit_broadcast(mod, ty, value);
   }
   value->set_name(name);
   mod->set_value(name, value);
@@ -685,7 +682,7 @@ ir::value *assignment_expression::codegen(ir::module *mod) const{
   if(auto *x = dynamic_cast<const named_expression*>(lvalue_)){
     ir::type *ty = mod->get_scope().types.at(x->id()->name());
     rvalue = explicit_cast(mod->get_builder(), rvalue, ty);
-    implicit_broadcast(mod, rvalue, ty);
+    implicit_broadcast(mod, ty, rvalue);
     mod->set_value(x->id()->name(), rvalue);
   }
   else if(auto* x = dynamic_cast<const unary_operator*>(lvalue_)){

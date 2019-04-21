@@ -10,11 +10,13 @@ R"(
 const tunable int32 TM = {16, 32, 64, 128};
 const tunable int32 TN = {16, 32, 64, 128};
 const tunable int32 TK = {8};
+const tunable int32 GZ = {2};
 
 void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
            int32 M, int32 N, int32 K){
   int32 rxa[TM] = get_global_range[TM](0);
   int32 ryb[TN] = get_global_range[TN](1);
+  int32 rz[1] = get_global_range[1](2);
   int32 rka[TK] = 0 ... TK;
   int32 rkb[TK] = 0 ... TK;
   fp32 c[TM, TN] = 0;
