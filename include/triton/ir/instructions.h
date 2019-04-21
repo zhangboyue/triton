@@ -509,6 +509,13 @@ private:
   TransT BT_;
 };
 
+//class outer_inst: public builtin_inst {
+//private:
+//  outer_inst(value *A, value *B, value *C, const std::string &name, instruction *next);
+//public:
+//  static instruction* create(value *A, value *B, value *C, const std::string &name = "", instruction *next = nullptr);
+//};
+
 class trans_inst: public builtin_inst {
 public:
   ir::type* get_res_ty(ir::type* in);

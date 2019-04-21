@@ -749,20 +749,41 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
       ir::value *A = ins->get_operand(0);
       ir::value *B = ins->get_operand(1);
       ir::value *C = ins->get_operand(2);
-      shared_tile *TA = (shared_tile*)tmap_.at(A);
-      shared_tile *TB = (shared_tile*)tmap_.at(B);
-      distributed_tile *TC = (distributed_tile*)tmap_.at(C);
       bool AT = dot->is_a_trans();
       bool BT = dot->is_b_trans();
-      TA->set_vector_size(TC->axis(0).contiguous);
-      TB->set_vector_size(TC->axis(1).contiguous);
+      distributed_tile *TC = (distributed_tile*)tmap_.at(C);
       Function *f_mul_add = Intrinsic::getDeclaration(module, Intrinsic::fmuladd, {llvm_type(C->get_type()->get_scalar_ty(), ctx)});
-      result->for_each([&](indices_t idx){
-        Value *res = TC->get_value(idx);
-        unsigned NK = A->get_type()->get_tile_shapes()[1]->get_value();
-        for(unsigned K = 0; K < NK; ++K){
-          indices_t a_idx = {idx[0], builder.getInt32(K)};
-          indices_t b_idx = {builder.getInt32(K), idx[1]};
+      if(dot->get_operand(0)->get_type()->get_tile_shapes()[1]->get_value() != 1)
+      {
+        shared_tile *TA = (shared_tile*)tmap_.at(A);
+        shared_tile *TB = (shared_tile*)tmap_.at(B);
+        TA->set_vector_size(TC->axis(0).contiguous);
+        TB->set_vector_size(TC->axis(1).contiguous);
+        result->for_each([&](indices_t idx){
+          Value *res = TC->get_value(idx);
+          unsigned NK = A->get_type()->get_tile_shapes()[1]->get_value();
+          for(unsigned K = 0; K < NK; ++K){
+            indices_t a_idx = {idx[0], builder.getInt32(K)};
+            indices_t b_idx = {builder.getInt32(K), idx[1]};
+            if(AT)
+              std::swap(a_idx[0], a_idx[1]);
+            if(BT)
+              std::swap(b_idx[0], b_idx[1]);
+            Value *a = TA->get_value(a_idx);
+            Value *b = TB->get_value(b_idx);
+            res = builder.CreateCall(f_mul_add, {a, b, res});
+          }
+          result->set_value(idx, res);
+        });
+      }
+      else
+      {
+        distributed_tile *TA = (distributed_tile*)tmap_.at(A);
+        distributed_tile *TB = (distributed_tile*)tmap_.at(B);
+        result->for_each([&](indices_t idx){
+          Value *res = TC->get_value(idx);
+          indices_t a_idx = {idx[0], builder.getInt32(0)};
+          indices_t b_idx = {builder.getInt32(0), idx[1]};
           if(AT)
             std::swap(a_idx[0], a_idx[1]);
           if(BT)
@@ -770,9 +791,9 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
           Value *a = TA->get_value(a_idx);
           Value *b = TB->get_value(b_idx);
           res = builder.CreateCall(f_mul_add, {a, b, res});
-        }
-        result->set_value(idx, res);
-      });
+          result->set_value(idx, res);
+        });
+      }
     }
     // element-wise
     else {

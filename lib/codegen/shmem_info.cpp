@@ -70,7 +70,8 @@ void shmem_info::run(ir::module &mod) {
     ir::builder builder(mod.get_context());
     for(ir::basic_block *block: fn->blocks())
     for(ir::instruction *i: block->get_inst_list()){
-      if(dynamic_cast<ir::dot_inst*>(i)){
+      if(dynamic_cast<ir::dot_inst*>(i))
+      if(i->get_operand(1)->get_type()->get_tile_shapes()[1]->get_value() != 1){
         add_copy(i->get_operand(0), builder);
         add_copy(i->get_operand(1), builder);
       }

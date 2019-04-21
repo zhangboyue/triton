@@ -8,56 +8,68 @@
 const char* src =
 R"(
 const tunable int32 TM = {16, 32, 64, 128};
-const tunable int32 TN = {16, 32, 64, 128};
+const tunable int32 TN = {8};
 const tunable int32 TK = {8};
 
-void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
-           int32 M, int32 N, int32 K,
-           int32 bound){
+void blocksparse(restrict read_only fp32 *a, restrict read_only fp32 *b, fp32 *c,
+                int32 M, int32 N, int32 K, int32 bound){
   int32 rxa[TM] = get_global_range[TM](0);
   int32 ryb[TN] = get_global_range[TN](1);
   int32 rka[TK] = 0 ... TK;
   int32 rkb[TK] = 0 ... TK;
-  fp32 c[TM, TN] = 0;
-  fp32* pa[TM, TK] = A + rka[newaxis, :]*M + rxa[:, newaxis];
-  fp32* pb[TN, TK] = B + rkb[newaxis, :]*K + ryb[:, newaxis];
+  fp32 C[TM, TN] = 0;
+  fp32* pa[TM, TK] = a + rka[newaxis, :]*M + rxa[:, newaxis];
+  fp32* pb[TN, TK] = b + rkb[newaxis, :]*K + ryb[:, newaxis];
   fp32 a[TM, TK] = *pa;
   fp32 b[TN, TK] = *pb;
-  for(int32 k = K; k > bound; k = k - TK){
-    c = dot(a, trans(b), c);
+  for(int32 k = K; k > 0;){
+    C = dot(a, trans(b), C);
     pa = pa + TK*M;
-    pb = pb + TK*K;
-    a = *pa;
-    b = *pb;
-  }
-  for(int32 k = bound; k > 0; k = k - TK){
+    pb = pb + TK*N;
+    k = k - TK;
+    int1 checka[TM, TK] = k > bound;
+    int1 checkb[TN, TK] = k > bound;
+    @checka a = *pa;
+    @checkb b = *pb;
+    if(k > bound)
+      continue;
+    int1 checka0[TM] = rxa < M;
     int1 checka1[TK] = rka < k;
+    int1 checkb0[TN] = ryb < N;
     int1 checkb1[TK] = rkb < k;
-    int1 checka[TM, TK] = checka1[newaxis, :];
-    int1 checkb[TN, TK] = checkb1[newaxis, :];
-    fp32 a[TM, TK] = checka? *pa : 0;
-    fp32 b[TN, TK] = checkb? *pb : 0;
-    c = dot(a, trans(b), c);
-    pa = pa + TK*M;
-    pb = pb + TK*K;
+    checka = checka0[:, newaxis] && checka1[newaxis, :];
+    checkb = checkb0[:, newaxis] && checkb1[newaxis, :];
+    a = checka ? *pa : 0;
+    b = checkb ? *pb : 0;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 ryc[TN] = get_global_range[TN](1);
-  fp32* pc[TM, TN] = C + ryc[newaxis, :]*M + rxc[:, newaxis];
+  fp32* pc[TM, TN] = c + ryc[newaxis, :]*M + rxc[:, newaxis];
   int1 checkc0[TM] = rxc < M;
   int1 checkc1[TN] = ryc < N;
   int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
-  @checkc *pc = c;
+  @checkc *pc = C;
 }
 )";
+
+std::vector<int> make_deltas(std::vector<int> mask, int K, int N){
+  std::vector<std::vector<std::pair<int,int>>> pairs(N);
+  unsigned int current = 0;
+  for(int k = 0; k < K; k++)
+  for(int n = 0; n < N; n++){
+    if(mask[k + n*K])
+      pairs[n].push_back({current, k});
+  }
+}
 
 int main() {
   // initialize default compute device
   auto context = triton::driver::backend::contexts::get_default();
   triton::jit jit(context);
 
+
   // matrix multiplication parameters
-  int32_t M = 512, N = 512, K = 512;
+  int32_t M = 512, N = 32, K = 2048;
   std::vector<float> hc(M*N);
   std::vector<float> rc(M*N);
   std::vector<float> ha(M*K);
@@ -89,11 +101,14 @@ int main() {
     std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, 1};
     // fast bounds-checking
     unsigned TK = jit.get_int("TK");
-    unsigned last_a = ((M*K - 1) - (TM*TK + 1)) / M;
-    unsigned last_b = ((N*K - 1) - (TN*TK + 1)) / N;
-    last_a = last_a / TK * TK;
-    last_b = last_b / TK * TK;
-    int32_t bound = K - std::max<unsigned>(last_a, last_b);
+    unsigned lasti = (grid[0]*TM - 1)*TM + TM - 1;
+    unsigned lastj = (grid[1]*TN - 1)*TN + TN - 1;
+    unsigned lastk = TK - 1;
+    bool AT = false;
+    bool BT = true;
+    unsigned last_safe_a = (AT==false)?(M*K - 1 - lasti)/M - lastk : M*K - 1 - lasti*K - lastk;
+    unsigned last_safe_b =  (BT==true)?(N*K - 1 - lastj)/N - lastk : N*K - 1 - lastj*K - lastk;
+    int32_t bound = std::max<unsigned>(1, std::max(K - last_safe_a, K - last_safe_b));
     // set argument
     kernel->setArg(0, da);
     kernel->setArg(1, db);
@@ -122,7 +137,7 @@ int main() {
     8, 8,
     4
   };
-//  jit.autotune("matmul",src, benchmark);
+  jit.autotune("matmul",src, benchmark);
   jit.add_module("matmul", src, params);
   triton::driver::kernel* kernel = jit.get_function("matmul");
   triton::jit::launch_information info = jit.get_launch_info("matmul");

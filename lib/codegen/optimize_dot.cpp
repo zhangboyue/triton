@@ -19,6 +19,7 @@ void optimize_dot::run(ir::module &mod) {
   for(ir::basic_block *block: fn->blocks())
   for(ir::instruction *i: block->get_inst_list())
   if(auto dot = dynamic_cast<ir::dot_inst*>(i))
+  if(dot->get_operand(1)->get_type()->get_tile_shapes()[1]->get_value() != 1)
   if(!dot->is_a_trans() && !dot->is_b_trans()){
     builder.set_insert_point(i);
     ir::value *A = dot->get_operand(0);

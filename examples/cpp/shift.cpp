@@ -132,12 +132,12 @@ int main() {
   for(int h = 0 ; h < H; h++)
   for(int w = 0 ; w < W; w++)
   for(int bs = 0 ; bs < BS; bs++){
-    float value = 1;
+    float value = (float)rand() / RAND_MAX;
     size_t idx = bs + w*stride_i_w + h*stride_i_h + c*stride_i_c;
     ha[idx] = value;
   }
   for(size_t i = 0; i < hb.size(); i++)
-    hb[i] = 1;
+    hb[i] = (float)rand() / RAND_MAX;
   for(size_t i = 0; i < hc.size(); i++)
     hc[i] = 0;
   triton::driver::buffer* dc = triton::driver::buffer::create(context, hc.size()*4);
