@@ -484,6 +484,11 @@ instruction* broadcast_inst::create(value *arg, const type::tile_shapes_t &shape
   return new broadcast_inst(arg, shapes, name, next);
 }
 
+// downcast
+
+instruction* downcast_inst::create(value *arg, const std::string &name, instruction *next) {
+  return new downcast_inst(arg->get_type()->get_scalar_ty(), arg, name, next);
+}
 
 //===----------------------------------------------------------------------===//
 //                               matmul_inst classes
@@ -553,6 +558,8 @@ instruction* select_inst::create(value *pred, value *if_value, value *else_value
 //===----------------------------------------------------------------------===//
 //                               builtin instructions
 //===----------------------------------------------------------------------===//
+
+// get_global_range
 get_global_range_inst::get_global_range_inst(type *ty, unsigned axis,
                                              const std::string &name, instruction *next)
   : builtin_inst(ty, 0, 1, name, next), axis_(axis) {
@@ -566,6 +573,15 @@ instruction* get_global_range_inst::create(context &ctx, unsigned axis, type::ti
   return new get_global_range_inst(tile_ty, axis, name, next);
 }
 
+// get_range_id
+get_range_id_inst::get_range_id_inst(type *ty, unsigned axis, const std::string &name, instruction *next)
+  : builtin_inst(ty, 0, 1, name, next), axis_(axis){
+
+}
+
+instruction* get_range_id_inst::create(context &ctx, unsigned axis, const std::string &name, instruction *next) {
+  return new get_range_id_inst(type::get_int32_ty(ctx), axis, name, next);
+}
 
 //===----------------------------------------------------------------------===//
 //                               intrinsic instructions

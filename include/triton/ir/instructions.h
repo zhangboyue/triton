@@ -464,6 +464,17 @@ public:
 };
 
 
+// downcast
+
+class downcast_inst: public unary_inst {
+private:
+  using unary_inst::unary_inst;
+  std::string repr_impl() const { return "downcast"; }
+
+public:
+  static instruction* create(value *arg, const std::string &name = "", instruction *next = nullptr);
+};
+
 //===----------------------------------------------------------------------===//
 //                               builtin_inst classes
 //===----------------------------------------------------------------------===//
@@ -482,6 +493,19 @@ public:
   static instruction* create(context &ctx, unsigned axis, type::tile_shapes_t::value_type size,
                              const std::string &name = "",
                              instruction *next = nullptr);
+  unsigned get_axis() const { return axis_; }
+
+private:
+  unsigned axis_;
+};
+
+class get_range_id_inst: public builtin_inst {
+private:
+  get_range_id_inst(type *ty, unsigned axis, const std::string &name, instruction *next);
+  std::string repr_impl() const { return "get_range_id(" + std::to_string(axis_) + ")"; }
+
+public:
+  static instruction* create(context &ctx, unsigned axis, const std::string &name = "", instruction *next = nullptr);
   unsigned get_axis() const { return axis_; }
 
 private:

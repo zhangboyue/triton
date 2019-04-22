@@ -39,6 +39,8 @@ void tune::init_c_graph(ir::instruction *v) {
   ir::type::tile_shapes_t shapes;
   if(auto *store = dynamic_cast<ir::store_inst*>(v))
     shapes = store->get_pointer_operand()->get_type()->get_tile_shapes();
+  else if(auto *downcast = dynamic_cast<ir::downcast_inst*>(v))
+    return;
   else
     shapes = v->get_type()->get_tile_shapes();
   // Reshape

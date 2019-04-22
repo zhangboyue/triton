@@ -285,12 +285,20 @@ value *builder::create_broadcast(value *arg, const type::tile_shapes_t &shapes, 
   return insert(broadcast_inst::create(arg, shapes, name));
 }
 
+value *builder::create_downcast(value *arg, const std::string &name) {
+  return insert(downcast_inst::create(arg, name));
+}
+
 //===----------------------------------------------------------------------===//
 //                               built-in instructions
 //===----------------------------------------------------------------------===//
 
 value *builder::create_get_global_range(unsigned axis, type::tile_shapes_t::value_type size, const std::string &name) {
   return insert(get_global_range_inst::create(ctx_, axis, size, name));
+}
+
+value *builder::create_get_range_id(unsigned axis, const std::string &name) {
+  return insert(get_range_id_inst::create(ctx_, axis, name));
 }
 
 value *builder::create_dot(value *A, value *B, value *C, const std::string &name) {

@@ -318,6 +318,10 @@ Instruction *selection::llvm_inst(ir::instruction *inst, std::function<Value*(ir
     Value *else_value = value(ii->get_operand(2));
     return builder.Insert(SelectInst::Create(pred, if_value, else_value));
   }
+  if(ir::get_range_id_inst* ii = dynamic_cast<ir::get_range_id_inst*>(inst)){
+    Value *offset = tgt_->get_block_id(builder.GetInsertBlock()->getModule(), builder, ii->get_axis());
+    return (Instruction*)builder.CreateAdd(offset, builder.getInt32(0));
+  }
   // unknown instruction
   throw std::runtime_error("unknown conversion from ir::instruction to Instruction");
 }
@@ -617,6 +621,10 @@ void selection::lower_tile_instruction(ir::instruction *ins, llvm::IRBuilder<> &
     });
   }
   else {
+    if(auto *x = dynamic_cast<ir::downcast_inst*>(ins)){
+      vmap_[x] = tmap_[x->get_operand(0)]->get_value({builder.getInt32(0)});
+      return;
+    }
     tile *ti = tmap_[ins];
     distributed_tile* result = (distributed_tile*)ti;
     if(!ins->get_type()->is_tile_ty())

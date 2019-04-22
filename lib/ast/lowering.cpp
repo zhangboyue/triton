@@ -96,37 +96,64 @@ void node::implicit_cast(ir::builder &builder, ir::value *&lhs, ir::value *&rhs,
 }
 
 void node::implicit_broadcast(ir::module *mod, ir::value *&lhs, ir::value *&rhs) {
-  implicit_broadcast(mod, lhs->get_type(), rhs);
-  implicit_broadcast(mod, rhs->get_type(), lhs);
+  ir::type *lhs_ty = lhs->get_type();
+  ir::type *rhs_ty = rhs->get_type();
+  ir::type *res_ty = nullptr;
+  if(!lhs_ty->is_tile_ty() && !rhs_ty->is_tile_ty())
+    return;
+  else if(lhs_ty->is_tile_ty() && !rhs_ty->is_tile_ty())
+    res_ty = lhs_ty;
+  else if(!lhs_ty->is_tile_ty() && rhs_ty->is_tile_ty())
+    res_ty = rhs_ty;
+  else{
+    auto lhs_shapes = lhs_ty->get_tile_shapes();
+    auto rhs_shapes = rhs_ty->get_tile_shapes();
+    size_t lhs_size = lhs_shapes.size();
+    size_t rhs_size = rhs_shapes.size();
+    size_t res_size = std::max(lhs_size, rhs_size);
+    ir::type::tile_shapes_t res_shapes(res_size);
+    ir::type::tile_shapes_t::value_type one = ir::tile_type::make_one(mod->get_context());
+    for(int i = 0; i < res_size; i++){
+      if(i >= res_size - lhs_size && i >= res_size - rhs_size)
+        res_shapes[i] = lhs_shapes[i]==one?rhs_shapes[i]:lhs_shapes[i];
+      else if(i >= res_size - lhs_size)
+        res_shapes[i] = lhs_shapes[i];
+      else if(i >= res_size - rhs_size)
+        res_shapes[i] = rhs_shapes[i];
+    }
+    res_ty = ir::tile_type::get(lhs_ty->get_scalar_ty(), res_shapes);
+  }
+  implicit_broadcast(mod, res_ty, rhs);
+  implicit_broadcast(mod, res_ty, lhs);
 }
 
-void node::implicit_broadcast(ir::module *mod, ir::type *dst_ty, ir::value *&src){
+void node::implicit_broadcast(ir::module *mod, ir::type *ty, ir::value *&src){
   ir::builder &builder = mod->get_builder();
   ir::type *src_ty = src->get_type();
   ir::type::tile_shapes_t::value_type one = ir::tile_type::make_one(mod->get_context());
   // Both are scalar
-  if(!dst_ty->is_tile_ty() && !src_ty->is_tile_ty())
+  if(!ty->is_tile_ty() && !src_ty->is_tile_ty())
     return;
   // Broadcast scalar
-  if(dst_ty->is_tile_ty() && !src_ty->is_tile_ty()){
-    src = builder.create_splat(src, dst_ty->get_tile_shapes());
+  if(ty->is_tile_ty() && !src_ty->is_tile_ty()){
+    src = builder.create_splat(src, ty->get_tile_shapes());
     return;
   }
   // Downcast tile
-  if(!dst_ty->is_tile_ty() && src_ty->is_tile_ty()){
+  if(!ty->is_tile_ty() && src_ty->is_tile_ty()){
+    for(ir::constant *shape: src_ty->get_tile_shapes())
+      if(shape != one)
+        throw std::runtime_error("cannot downcast");
+    src = builder.create_downcast(src);
     return;
   }
   // Both are arrays
-  auto dst_shapes = dst_ty->get_tile_shapes();
+  auto dst_shapes = ty->get_tile_shapes();
   auto src_shapes = src_ty->get_tile_shapes();
-  if(dst_shapes == src_shapes)
-    return;
   int dst_dim = dst_shapes.size();
   int src_dim = src_shapes.size();
-  if(dst_dim < src_dim)
-    return;
-  int off = dst_dim - src_dim;
   // Pad
+  int off = dst_dim - src_dim;
   for(size_t i = 0; i < off; i++)
     src_shapes.insert(src_shapes.begin(), one);
   if(off > 0)
@@ -135,11 +162,8 @@ void node::implicit_broadcast(ir::module *mod, ir::type *dst_ty, ir::value *&src
   for(int i = dst_dim - 1; i>= 0; i--)
     if(dst_shapes[i] != src_shapes[i] && dst_shapes[i] != one && src_shapes[i] != one)
       throw std::runtime_error("cannot broadcast");
-  ir::type::tile_shapes_t shapes(dst_dim);
-  for(size_t i = 0; i < dst_dim; i++)
-    shapes[i] = src_shapes[i]==one?dst_shapes[i]:src_shapes[i];
-  if(shapes != src_shapes)
-    src = builder.create_broadcast(src, shapes);
+  if(dst_shapes != src_shapes)
+    src = builder.create_broadcast(src, dst_shapes);
 }
 
 /* Helper */
@@ -539,6 +563,11 @@ ir::value* get_global_range::codegen(ir::module *mod) const {
   return builder.create_get_global_range(axis_->value(), (ir::constant_int*)size_->codegen(mod));
 }
 
+// get_range_id
+ir::value* get_range_id::codegen(ir::module *mod) const {
+  return mod->get_builder().create_get_range_id(axis_->value());
+}
+
 // matmul
 ir::value* matmul_expression::codegen(ir::module *mod) const {
   ir::value *A = A_->codegen(mod);
@@ -567,6 +596,14 @@ ir::value* max_expression::codegen(ir::module *mod) const {
   ir::value* x = ((ir::cmp_inst*)cmp)->get_operand(0);
   ir::value* y = ((ir::cmp_inst*)cmp)->get_operand(1);
   return mod->get_builder().create_select(cmp, x, y);
+}
+
+// select
+ir::value* select_expression::codegen(ir::module *mod) const {
+  ir::value* pred = pred_->codegen(mod);
+  ir::value* if_value = if_value_->codegen(mod);
+  ir::value* else_value = else_value_->codegen(mod);
+  return mod->get_builder().create_select(pred, if_value, else_value);
 }
 
 // Trans

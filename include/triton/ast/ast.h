@@ -164,6 +164,15 @@ private:
   const constant* axis_;
 };
 
+class get_range_id: public builtin_expression{
+public:
+  get_range_id(node *axis): axis_((constant*)axis) { }
+  ir::value* codegen(ir::module *) const;
+
+private:
+  const constant* axis_;
+};
+
 class matmul_expression: public builtin_expression{
 public:
   matmul_expression(node* A, node *B, node *C):
@@ -196,6 +205,18 @@ public:
 private:
   const expression *x_;
   const expression *y_;
+};
+
+class select_expression: public builtin_expression{
+public:
+  select_expression(node* pred, node* if_value, node* else_value)
+    : pred_((expression*)pred), if_value_((expression*)if_value), else_value_((expression*)else_value) { }
+  ir::value* codegen(ir::module *mod) const;
+
+private:
+  const expression *pred_;
+  const expression *if_value_;
+  const expression *else_value_;
 };
 
 class trans_expression: public builtin_expression{
