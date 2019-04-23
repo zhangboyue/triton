@@ -553,7 +553,7 @@ void selection::create_tile(ir::value *v, IRBuilder<> &builder,
       for(unsigned i = 0; i < phi->get_num_incoming(); i++) {
         ir::basic_block* inc_block = phi->get_incoming_block(i);
         ir::value* inc_value = phi->get_incoming_value(i);
-        ir::value* terminator = inc_block->get_inst_list().back();
+        ir::instruction* terminator = inc_block->get_inst_list().back();
         bool is_loop_latch = buffer_info_->is_loop_latch(phi, terminator);
         tmap_.insert({inc_value, new shared_tile(ty, shapes2, is_loop_latch?next_ptr:pre_ptr, builder)});
       }
@@ -970,7 +970,7 @@ void selection::run(ir::module &src, Module &dst) {
         for(unsigned n = 0; n < phi->get_num_incoming(); n++){
           ir::basic_block* inc_block = phi->get_incoming_block(n);
           ir::value* inc_val = phi->get_incoming_value(n);
-          ir::value* terminator = inc_block->get_inst_list().back();
+          ir::instruction* terminator = inc_block->get_inst_list().back();
           BasicBlock *llvm_inc_block = last_block.at(inc_block);
           shared_tile *inc_shared = (shared_tile*)tmap_.at(inc_val);
           bool is_loop_latch = buffer_info_->is_loop_latch(phi, terminator);

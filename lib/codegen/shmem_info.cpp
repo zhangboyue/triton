@@ -11,7 +11,9 @@ namespace codegen{
 
 
 // run pass on module
-bool shmem_info::is_loop_latch(ir::phi_node *phi, ir::value *terminator){
+bool shmem_info::is_loop_latch(ir::phi_node *phi, ir::instruction *terminator){
+  if(phi->get_parent() != terminator->get_parent())
+    return false;
   if(auto *br = dynamic_cast<ir::cond_branch_inst*>(terminator))
     return br->get_true_dest() == phi->get_parent()
            || br->get_false_dest() == phi->get_parent();
@@ -100,7 +102,7 @@ void shmem_info::run(ir::module &mod) {
       bool is_double = false;
       for(unsigned n = 0; n < phi->get_num_incoming(); n++){
         ir::basic_block *inc_block = phi->get_incoming_block(n);
-        ir::value *terminator = inc_block->get_inst_list().back();
+        ir::instruction *terminator = inc_block->get_inst_list().back();
         is_double = is_double || is_loop_latch(phi, terminator);
       }
       // add to double-buffered

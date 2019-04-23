@@ -356,7 +356,9 @@ ir::value* iteration_statement::codegen(ir::module *mod) const{
     return builder.create_cond_br(cond, loop_bb, next_bb);
   });
   init_->codegen(mod);
-  builder.create_br(loop_bb);
+  ir::value *cond = stop_->codegen(mod);
+  builder.create_cond_br(cond, loop_bb, next_bb);
+//  builder.create_br(loop_bb);
   builder.set_insert_point(loop_bb);
   if(!is_terminator(statements_->codegen(mod)))
     mod->get_continue_fn()();
