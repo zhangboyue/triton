@@ -110,7 +110,7 @@ void jit::autotune(const std::string &name, const std::string &src, benchmark_t 
   std::vector<std::vector<unsigned>> ranges;
   for(ir::metaparameter *mp: mps)
     ranges.push_back(mp->get_space());
-  std::cout << ranges.size() << std::endl;
+//  std::cout << ranges.size() << std::endl;
   // iterate over parameters
   unsigned i;
   double best = 0;

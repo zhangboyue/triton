@@ -400,6 +400,7 @@ ir::value* selection_statement::codegen(ir::module* mod) const{
       builder.create_br(endif_bb);
   }
   // Endif
+  mod->seal_block(endif_bb);
   builder.set_insert_point(endif_bb);
   return nullptr;
 }

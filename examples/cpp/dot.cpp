@@ -58,7 +58,12 @@ void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
   fp32* pc[TM, TN] = C + ryc[newaxis, :]*ldc + rxc[:, newaxis];
   int32 *plock = locks + ridx + ridy*grid0;
   for(int32 L =  __atomic_cas(plock, 0, 1); L == 1; L = __atomic_cas(plock, 0, 1)){}
-  *pc = c;
+  if(rz == 1){
+    *pc = c;
+  }
+  else{
+    *pc = c + (*pc);
+  }
   __atomic_cas(plock, 1, 0);
 }
 )";

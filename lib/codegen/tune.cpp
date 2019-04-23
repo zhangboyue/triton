@@ -165,10 +165,17 @@ void tune::run(ir::module &mod) {
   for(ir::function *fn: mod.get_function_list())
   for(ir::basic_block *block: fn->blocks())
   for(ir::instruction *i : block->get_inst_list())
-  if(dynamic_cast<ir::load_inst*>(i) || dynamic_cast<ir::store_inst*>(i))
-  if(i->get_type()->is_tile_ty())
-    for(unsigned d = 1; d < i->get_type()->get_tile_shapes().size(); d++)
-      fixed_io_nts.insert(params_.at(i).at("nts.d" + std::to_string(d)));
+  if(dynamic_cast<ir::load_inst*>(i)){
+    bool skip = false;
+    for(ir::user* u: i->get_users())
+      if(dynamic_cast<ir::binary_operator*>(u))
+        skip = true;
+    if(skip)
+      continue;
+    if(i->get_type()->is_tile_ty())
+      for(unsigned d = 1; d < i->get_type()->get_tile_shapes().size(); d++)
+        fixed_io_nts.insert(params_.at(i).at("nts.d" + std::to_string(d)));
+  }
   for(ir::metaparameter* mp: fixed_io_nts)
     mp->set_value(1);
 }

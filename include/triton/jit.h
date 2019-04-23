@@ -60,6 +60,7 @@ public:
     void target_independent(ir::module &module) {
         optimize_dot.run(module);
         optimize_trans.run(module);
+        ir::print(module, std::cout);
     }
 
     void target_dependent(ir::module &module) {
@@ -70,7 +71,6 @@ public:
         shmem_barriers.run(module);
       }
       vectorize.run(module);
-      ir::print(module, std::cout);
     }
 
     codegen::tune tune;
