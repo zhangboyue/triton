@@ -173,6 +173,18 @@ private:
   const constant* axis_;
 };
 
+class atomic_cas: public builtin_expression{
+public:
+  atomic_cas(node *ptr, node *cmp, node *val): ptr_(ptr), cmp_(cmp), val_(val) { }
+  ir::value* codegen(ir::module *) const;
+
+private:
+  const node *ptr_;
+  const node *cmp_;
+  const node *val_;
+};
+
+
 class matmul_expression: public builtin_expression{
 public:
   matmul_expression(node* A, node *B, node *C):

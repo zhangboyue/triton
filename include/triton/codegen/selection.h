@@ -144,6 +144,7 @@ private:
   target *tgt_;
   shmem_info *buffer_info_;
   std::map<ir::metaparameter*, distributed_axis> axes_;
+  llvm::Value *sh_mem_ptr_;
 };
 
 }

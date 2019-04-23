@@ -55,7 +55,7 @@ STORAGE_SPEC_T get_storage_spec(node *op) { return ((token*)op)->storage_spec;}
 %token VOID UINT1 UINT8 UINT16 UINT32 UINT64 INT1 INT8 INT16 INT32 INT64 FP32 FP64
 %token IF ELSE FOR CONTINUE
 %token NEWAXIS ELLIPSIS AT
-%token GET_GLOBAL_RANGE GET_RANGE_ID DOT TRANS MAX MIN SELECT ALLOC_CONST
+%token GET_GLOBAL_RANGE GET_RANGE_ID DOT TRANS MAX MIN SELECT ATOMIC_CAS ALLOC_CONST
 
 %start translation_unit
 %%
@@ -125,6 +125,7 @@ builtin
   | MAX '(' expression ',' expression ')' { $$ = new max_expression($3, $5); }
   | MIN '(' expression ',' expression ')' { $$ = new min_expression($3, $5); }
   | SELECT '(' expression ',' expression ',' expression ')' { $$ = new select_expression($3, $5, $7); }
+  | ATOMIC_CAS '(' expression ',' expression ',' expression ')' { $$ = new atomic_cas($3, $5, $7); }
   ;
 
 primary_expression

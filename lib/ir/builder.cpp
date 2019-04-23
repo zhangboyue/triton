@@ -301,6 +301,10 @@ value *builder::create_get_range_id(unsigned axis, const std::string &name) {
   return insert(get_range_id_inst::create(ctx_, axis, name));
 }
 
+value *builder::create_atomic_cas(value *ptr, value *cmp, value *val, const std::string &name){
+  return insert(atomic_cas_inst::create(ptr, cmp, val, name));
+}
+
 value *builder::create_dot(value *A, value *B, value *C, const std::string &name) {
   return insert(dot_inst::create_nn(A, B, C, name));
 }

@@ -32,6 +32,8 @@ void shmem_info::replace(ir::value* before, ir::value *after) {
 }
 
 inline bool get_is_shared(ir::value* v) {
+  if(auto x = dynamic_cast<ir::atomic_cas_inst*>(v))
+    return true;
   if(auto x = dynamic_cast<ir::trans_inst*>(v))
     return true;
   if(auto x = dynamic_cast<ir::copy_to_shared_inst*>(v))

@@ -568,6 +568,14 @@ ir::value* get_range_id::codegen(ir::module *mod) const {
   return mod->get_builder().create_get_range_id(axis_->value());
 }
 
+// atomic cas
+ir::value* atomic_cas::codegen(ir::module *mod) const {
+  ir::value *ptr = ptr_->codegen(mod);
+  ir::value *cmp = cmp_->codegen(mod);
+  ir::value *val = val_->codegen(mod);
+  return mod->get_builder().create_atomic_cas(ptr, cmp, val);
+}
+
 // matmul
 ir::value* matmul_expression::codegen(ir::module *mod) const {
   ir::value *A = A_->codegen(mod);

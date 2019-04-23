@@ -15,7 +15,7 @@ const tunable int32 GZ = {2};
 void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
            int32 M, int32 N, int32 K,
            int32 lda, int32 ldb, int32 ldc,
-           int32 *locks) {
+           int32 *locks, int32 grid0, int32 grid1) {
   int32 rxa[TM] = get_global_range[TM](0);
   int32 ryb[TN] = get_global_range[TN](1);
   int32 rz = get_global_range[1](2);
@@ -59,7 +59,9 @@ void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
   int1 checkc0[TM] = rxc < M;
   int1 checkc1[TN] = ryc < N;
   int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
-  @checkc *pc = c;
+  int32 *plock = locks + ridx + ridy*grid0;
+  for(int32 L =  __atomic_cas(plock, 0, 1); L == 0; L = __atomic_cas(plock, 0, 1)){}
+  *pc = c;
 }
 )";
 
@@ -114,6 +116,8 @@ int main() {
     kernel->setArg(7, K);
     kernel->setArg(8, M);
     kernel->setArg(9, dlocks);
+    kernel->setArg(10, grid[0]);
+    kernel->setArg(11, grid[1]);
     // dry run
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
     stream->synchronize();

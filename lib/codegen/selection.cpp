@@ -312,6 +312,12 @@ Instruction *selection::llvm_inst(ir::instruction *inst, std::function<Value*(ir
     LoadInst *result = new LoadInst(ptr);
     return builder.Insert(result);
   }
+  if(ir::store_inst* ii = dynamic_cast<ir::store_inst*>(inst)){
+    Value *val = value(ii->get_value_operand());
+    Value *ptr = value(ii->get_pointer_operand());
+    builder.CreateStore(val, ptr);
+    return nullptr;
+  }
   if(ir::select_inst* ii = dynamic_cast<ir::select_inst*>(inst)){
     Value *pred = value(ii->get_operand(0));
     Value *if_value = value(ii->get_operand(1));
@@ -321,6 +327,29 @@ Instruction *selection::llvm_inst(ir::instruction *inst, std::function<Value*(ir
   if(ir::get_range_id_inst* ii = dynamic_cast<ir::get_range_id_inst*>(inst)){
     Value *offset = tgt_->get_block_id(builder.GetInsertBlock()->getModule(), builder, ii->get_axis());
     return (Instruction*)builder.CreateAdd(offset, builder.getInt32(0));
+  }
+  if(ir::atomic_cas_inst* ii = dynamic_cast<ir::atomic_cas_inst*>(inst)){
+    BasicBlock *current = builder.GetInsertBlock();
+    Module *module = current->getModule();
+    Value *tid = tgt_->get_local_id(module, builder, 0);
+    Value *pred = builder.CreateICmpEQ(tid, builder.getInt32(0));
+    BasicBlock *tid_0_bb = BasicBlock::Create(ctx, "tid_0", current->getParent());
+    BasicBlock *tid_0_done_bb = BasicBlock::Create(ctx, "tid_0_done", current->getParent());
+    Value *ptr = builder.CreateGEP(sh_mem_ptr_, builder.getInt32(alloc_->get_offset(ii)));
+    ptr = builder.CreateBitCast(ptr, PointerType::get(builder.getInt32Ty(), ptr->getType()->getPointerAddressSpace()));
+    builder.CreateCondBr(pred, tid_0_bb, tid_0_done_bb);
+    builder.SetInsertPoint(tid_0_bb);
+    Value *cas_ptr = value(ii->get_operand(0));
+    Value *cas_cmp = value(ii->get_operand(1));
+    Value *cas_val = value(ii->get_operand(2));
+    Value *old = builder.CreateAtomicCmpXchg(cas_ptr, cas_cmp, cas_val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+    old = builder.CreateExtractValue(old, {0});
+    builder.CreateStore(old, ptr);
+    builder.CreateBr(tid_0_done_bb);
+    builder.SetInsertPoint(tid_0_done_bb);
+    tgt_->add_barrier(module, builder);
+    Value *res = builder.CreateLoad(ptr);
+    return (Instruction*)res;
   }
   // unknown instruction
   throw std::runtime_error("unknown conversion from ir::instruction to Instruction");
@@ -908,6 +937,7 @@ void selection::run(ir::module &src, Module &dst) {
                            nullptr, "__shared_ptr", nullptr, GlobalVariable::NotThreadLocal, 3);
       sh_mem_ptr = dst_builder.CreateBitCast(sh_mem_array, ptr_ty);
     }
+    sh_mem_ptr_ = sh_mem_ptr;
 
     // create grids
     init_grids(fn, dst_builder, sh_mem_ptr);

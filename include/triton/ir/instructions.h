@@ -512,6 +512,15 @@ private:
   unsigned axis_;
 };
 
+class atomic_cas_inst: public builtin_inst {
+private:
+  atomic_cas_inst(value *ptr, value *cmp, value *val, const std::string &name, instruction *next);
+  std::string repr_impl() const { return "atomic_cas"; }
+
+public:
+  static instruction* create(value *ptr, value *cmp, value *val, const std::string &name = "", instruction *next = nullptr);
+};
+
 class dot_inst: public builtin_inst {
 public:
   enum TransT { NoTrans, Trans };

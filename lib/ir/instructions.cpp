@@ -583,6 +583,18 @@ instruction* get_range_id_inst::create(context &ctx, unsigned axis, const std::s
   return new get_range_id_inst(type::get_int32_ty(ctx), axis, name, next);
 }
 
+// atomic cas
+
+atomic_cas_inst::atomic_cas_inst(value *ptr, value *cmp, value *val, const std::string &name, instruction *next)
+  : builtin_inst(ptr->get_type()->get_pointer_element_ty(), 3, 1, name, next) {
+  set_operand(0, ptr);
+  set_operand(1, cmp);
+  set_operand(2, val);
+}
+
+instruction* atomic_cas_inst::create(value *ptr, value *cmp, value *val, const std::string &name, instruction *next) {
+  return new atomic_cas_inst(ptr, cmp, val, name, next);
+}
 //===----------------------------------------------------------------------===//
 //                               intrinsic instructions
 //===----------------------------------------------------------------------===//

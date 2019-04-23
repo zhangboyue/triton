@@ -4,6 +4,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/IRBuilder.h"
+#include <iostream>
 
 using namespace llvm;
 
@@ -126,7 +127,6 @@ Value* cpu_target::get_global_offset(Module *module, IRBuilder<>& builder, unsig
 Value* cpu_target::get_local_id(Module *module, IRBuilder<>& builder, unsigned ax) {
   return builder.getInt32(0);
 }
-
 
 }
 }
