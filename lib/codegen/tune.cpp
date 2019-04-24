@@ -128,6 +128,13 @@ std::vector<ir::metaparameter *> tune::get_params(ir::module &mod) {
     if(seen.insert(x.second).second && !x.second->has_value()){
       result.push_back(x.second);
     }
+
+  for(auto x: mod.globals()){
+    if(auto mp = dynamic_cast<ir::metaparameter*>(x.second))
+      if(seen.insert(mp).second && !mp->has_value())
+        result.push_back(mp);
+  }
+
   return result;
 }
 
@@ -154,30 +161,22 @@ void tune::run(ir::module &mod) {
     // Layout parameters
     while(!nodes_.empty()){
       ir::type *ty = mod.get_builder().get_int32_ty();
-      ir::metaparameter *nts = ir::metaparameter::create(ctx, ty, 2, 2);
+      ir::metaparameter *nts = ir::metaparameter::create(ctx, ty, 1, 1);
+      nts->set_value(1);
       ir::metaparameter *mts = ir::metaparameter::create(ctx, ty, 4, 32);
       connected_components(*nodes_.begin(), {nts, mts}, nodes_, dependencies_);
     }
   }
 
   // Simplify metaparameters
-  std::set<ir::metaparameter*> fixed_io_nts;
   for(ir::function *fn: mod.get_function_list())
   for(ir::basic_block *block: fn->blocks())
   for(ir::instruction *i : block->get_inst_list())
-  if(dynamic_cast<ir::load_inst*>(i)){
-    bool skip = false;
-    for(ir::user* u: i->get_users())
-      if(dynamic_cast<ir::binary_operator*>(u))
-        skip = true;
-    if(skip)
-      continue;
-    if(i->get_type()->is_tile_ty())
-      for(unsigned d = 1; d < i->get_type()->get_tile_shapes().size(); d++)
-        fixed_io_nts.insert(params_.at(i).at("nts.d" + std::to_string(d)));
+  if(dynamic_cast<ir::load_inst*>(i) && i->get_type()->is_tile_ty()){
+    ir::type *ty = mod.get_builder().get_int32_ty();
+    std::unique_ptr<ir::metaparameter> tmp(ir::metaparameter::create(ctx, ty, 2, 2));
+    *params_.at(i).at("nts.d0") = *tmp;
   }
-  for(ir::metaparameter* mp: fixed_io_nts)
-    mp->set_value(1);
 }
 
 void tune::init(ir::module &mod) {

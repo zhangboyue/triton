@@ -10,7 +10,7 @@ R"(
 const tunable int32 TM = {16, 32, 64, 128};
 const tunable int32 TN = {16, 32, 64, 128};
 const tunable int32 TK = {8};
-const tunable int32 GZ = {2};
+const tunable int32 GZ = {1};
 
 void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
            int32 M, int32 N, int32 K,
@@ -22,8 +22,8 @@ void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
   int32 rka[TK] = 0 ... TK;
   int32 rkb[TK] = 0 ... TK;
   fp32 c[TM, TN] = 0;
-  int32 div = K / 2;
-  int32 rem = K % 2;
+  int32 div = K / GZ;
+  int32 rem = K % GZ;
   K = select(rz < rem, div - 1, div);
   int32 offk = select(rz < rem, rz*(div + 1), rz*div + rem);
   fp32* pa[TM, TK] = A + (offk + rka[newaxis, :])*lda + rxa[:, newaxis];
@@ -58,11 +58,19 @@ void matmul(restrict read_only fp32 *A, restrict read_only fp32 *B, fp32 *C,
   fp32* pc[TM, TN] = C + ryc[newaxis, :]*ldc + rxc[:, newaxis];
   int32 *plock = locks + ridx + ridy*grid0;
   for(int32 L =  __atomic_cas(plock, 0, 1); L == 1; L = __atomic_cas(plock, 0, 1)){}
-  if(rz == 1){
-    *pc = c;
+  int32 *pcount = plock + grid0*grid1;
+  int32 count = *pcount;
+  int32 countp1 = select(count == GZ - 1, 0, count + 1);
+  int1 checkc0[TM] = rxc < M;
+  int1 checkc1[TN] = ryc < N;
+  int1 checkc[TM, TN] = checkc0[:, newaxis] && checkc1[newaxis, :];
+  if(count == 0) {
+    @checkc *pc = c;
+    *pcount = countp1;
   }
-  else{
-    *pc = c + (*pc);
+  else {
+    @checkc *pc = c + (checkc ? *pc : 0);
+    *pcount = countp1;
   }
   __atomic_cas(plock, 1, 0);
 }
@@ -105,7 +113,8 @@ int main() {
     unsigned TM = info.global_range_size[0];
     unsigned TN = info.global_range_size[1];
     unsigned nthreads = info.num_threads;
-    std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, 2};
+    unsigned GZ = jit.get_int("GZ");
+    std::array<size_t, 3> grid = {(M + TM - 1)/TM, (N + TN - 1)/TN, GZ};
     // init locks
     stream->write(dlocks, true, 0, hlocks);
     // set argument
@@ -116,7 +125,7 @@ int main() {
     kernel->setArg(4, N);
     kernel->setArg(5, K);
     kernel->setArg(6, M);
-    kernel->setArg(7, K);
+    kernel->setArg(7, N);
     kernel->setArg(8, M);
     kernel->setArg(9, dlocks);
     kernel->setArg(10, grid[0]);
@@ -135,7 +144,7 @@ int main() {
 
   // just-in-time compile source-code
   std::vector<unsigned> params = {
-    16, 2, 64, 16, 2, 64, 16, 8, 2, 2, 8, 8, 8
+    16, 2, 64, 16, 2, 64, 16, 8, 2, 2, 8, 8, 8, 1
   };
 //  jit.autotune("matmul",src, benchmark);
   jit.add_module("matmul", src, params);
