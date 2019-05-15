@@ -46,6 +46,9 @@ public:
     // swap b and c for wgrad
     if(ty_ == WGRAD){
       shapes_b_.swap(shapes_c_);
+      std::swap(BD_, CD_);
+      std::swap(BH_, CH_);
+      std::swap(BW_, CW_);
     }
     // leading dimensions
     auto set_ld = [](const std::vector<int32_t>& shapes,
@@ -62,6 +65,7 @@ public:
     set_ld(shapes_b_, ld_b_);
     set_ld(shapes_c_, ld_c_);
     // equivalent matmul
+    b_trans_ = ty_ != BPROP;
     if(ty_ == WGRAD){
       M_ = shapes_c_[0]*shapes_c_[1]*shapes_c_[2]*shapes_c_[3];
       N_ = shapes_c_[4];
@@ -73,9 +77,10 @@ public:
       K_ = shapes_b_[0]*shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
     }
     // look-up table info
-    Fs_ = shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
-    if(ty_ == BPROP)
-      Fs_ *= shapes_b_[4];
+    if(ty_ == FPROP)
+      Fs_ = shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
+    else
+      Fs_ = K_;
     TK_ = 8;
     Luts_ = (TK_ + Fs_ - 1) / Fs_ * Fs_;
   }
@@ -100,13 +105,11 @@ public:
   }
 
   void build_deltas(std::vector<int>& deltas){
-    if(ty_ == WGRAD)
-      throw std::runtime_error("no look-up table necessary for wgrad");
     deltas.resize(Luts_ + upsample_d_*upsample_h_*upsample_w_*Luts_);
 
     auto unpack = [&](int32_t ltrs){
-      int32_t l = (ty_ == BPROP) ? ltrs % NF_ : ltrs / Fs_;
-      int32_t trs = (ty_ == BPROP) ? ltrs / NF_ : ltrs % Fs_;
+      int32_t l = (ty_ == BPROP) ? ltrs % NF_ : ltrs / (BD_*BH_*BW_);
+      int32_t trs = (ty_ == BPROP) ? ltrs / NF_ : ltrs % (BD_*BH_*BW_);
       int32_t tr = trs / BW_;
       int32_t s = trs % BW_;
       int32_t t = tr / BH_;
@@ -145,18 +148,19 @@ public:
         int32_t rdiff = (nextr + ph)/upsample_h_ - (r + ph)/upsample_h_;
         int32_t sdiff = (nexts + pw)/upsample_w_ - (s + pw)/upsample_w_;
         // delta pointers
-        deltas_ptr[i] = cdiff*ld_a_[1] + tdiff*ld_a_[2] + rdiff*ld_a_[3] + sdiff*ld_a_[4];
+        if(ty_ == WGRAD)
+          deltas_ptr[i] = cdiff*ld_a_[0] + tdiff*ld_a_[2] + rdiff*ld_a_[3] + sdiff*ld_a_[4];
+        else
+          deltas_ptr[i] = cdiff*ld_a_[1] + tdiff*ld_a_[2] + rdiff*ld_a_[3] + sdiff*ld_a_[4];
       }
     }
   }
 
   void build_masks(std::vector<int>& masks){
-    if(ty_ == WGRAD)
-      throw std::runtime_error("no look-up table necessary for wgrad");
     masks.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
     auto unpack = [&](int32_t ltrs){
-      int32_t l = (ty_ == BPROP) ? ltrs % NF_ : ltrs / Fs_;
-      int32_t trs = (ty_ == BPROP) ? ltrs / NF_ : ltrs % Fs_;
+      int32_t l = (ty_ == BPROP) ? ltrs % NF_ : ltrs / (BD_*BH_*BW_);
+      int32_t trs = (ty_ == BPROP) ? ltrs / NF_ : ltrs % (BD_*BH_*BW_);
       int32_t tr = trs / BW_;
       int32_t s = trs % BW_;
       int32_t t = tr / BH_;
@@ -211,20 +215,18 @@ public:
     kernel->setArg(5, K_);
     kernel->setArg(6, AH_);
     kernel->setArg(7, AW_);
+    kernel->setArg(8, BH_);
+    kernel->setArg(9, BW_);
+    kernel->setArg(10, CH_);
+    kernel->setArg(11, CW_);
     if(ty_ == WGRAD){
-      kernel->setArg(8, CH_);
-      kernel->setArg(9, CW_);
-      kernel->setArg(10, BH_);
-      kernel->setArg(11, BW_);
+      kernel->setArg(12, ld_a_[1]);
+      kernel->setArg(13, ld_a_[0]);
     }
     else{
-      kernel->setArg(8, BH_);
-      kernel->setArg(9, BW_);
-      kernel->setArg(10, CH_);
-      kernel->setArg(11, CW_);
+      kernel->setArg(12, ld_a_[0]);
+      kernel->setArg(13, ld_a_[1]);
     }
-    kernel->setArg(12, ld_a_[0]);
-    kernel->setArg(13, ld_a_[1]);
     kernel->setArg(14, ld_a_[2]);
     kernel->setArg(15, ld_a_[3]);
     kernel->setArg(16, ld_a_[4]);
@@ -233,38 +235,44 @@ public:
     kernel->setArg(19, ld_b_[2]);
     kernel->setArg(20, ld_b_[3]);
     kernel->setArg(21, ld_b_[4]);
-    kernel->setArg(22, ld_c_[0]);
-    kernel->setArg(23, ld_c_[1]);
-    kernel->setArg(24, ld_c_[2]);
-    kernel->setArg(25, ld_c_[3]);
-    kernel->setArg(26, ld_c_[4]);
+    if(ty_ == WGRAD){
+      kernel->setArg(22, ld_c_[0]);
+      kernel->setArg(23, ld_c_[4]);
+      kernel->setArg(24, ld_c_[1]);
+      kernel->setArg(25, ld_c_[2]);
+      kernel->setArg(26, ld_c_[3]);
+    }
+    else{
+      kernel->setArg(22, ld_c_[0]);
+      kernel->setArg(23, ld_c_[1]);
+      kernel->setArg(24, ld_c_[2]);
+      kernel->setArg(25, ld_c_[3]);
+      kernel->setArg(26, ld_c_[4]);
+    }
     kernel->setArg(27, pad_h_);
     kernel->setArg(28, pad_w_);
   }
 
   std::vector<unsigned> default_params() {
-    if(ty_ == FPROP)
+    if(b_trans_)
       return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4};
-    else if(ty_ == BPROP)
-      return {32, 2, 64, 32, 64, 32, 4, 2, 2, 4, 2, 8, 4, 2};
     else
-      return {8, 2, 16, 8, 2, 16, 8, 2, 8, 8};
+      return {32, 2, 64, 32, 64, 32, 4, 2, 2, 4, 2, 8, 4, 2};
   }
 
 
   std::string xprop() {
-    bool trans_b = ty_ == FPROP;
-    std::string BS   = trans_b ?"[TN,TK]"      : "[TK, TN]";
-    std::string bcb0 = trans_b ?"[:, newaxis]" : "[newaxis, :]";
-    std::string bcb1 = trans_b ?"[newaxis, :]" : "[:, newaxis]";
-    std::string ldb0 = trans_b ?"*ldb_s"       : "";
-    std::string ldb1 = trans_b ?""             : "*ldb_c";
-    std::string useb = trans_b ?"trans(b)"     : "b";
-    std::string flipr = trans_b?""             : "BH - 1 -";
-    std::string flips = trans_b?""             : "BW - 1 -";
-    std::string ax = trans_b?"crs"          : "rsc";
+    std::string BS    = b_trans_ ? "[TN,TK]"      : "[TK, TN]";
+    std::string bcb0  = b_trans_ ? "[:, newaxis]" : "[newaxis, :]";
+    std::string bcb1  = b_trans_ ? "[newaxis, :]" : "[:, newaxis]";
+    std::string ldb0  = b_trans_ ? "*ldb_s"       : "";
+    std::string ldb1  = b_trans_ ? ""             : "*ldb_c";
+    std::string useb  = b_trans_ ? "trans(b)"     : "b";
+    std::string flipr = b_trans_ ? ""             : "BH - 1 -";
+    std::string flips = b_trans_ ? ""             : "BW - 1 -";
+    std::string ax    = b_trans_ ? "crs"          : "rsc";
     std::vector<std::string> redax = {"BH", "BW", "N"};
-    if(trans_b)
+    if(b_trans_)
       redax = {"C", "BH", "BW"};
 
     std::string res =
@@ -273,8 +281,8 @@ public:
         const tunable int32 TN = {16, 32, 64};
         const tunable int32 TK = {8};
 
-        __constant__ int32* delta = alloc_const int32[1024];
-        __constant__ int32* masks = alloc_const int32[4096];
+        __constant__ int32* delta = alloc_const int32[2304];
+        __constant__ int32* masks = alloc_const int32[12000];
 
         void conv(read_only restrict fp32 *a,
                   read_only restrict fp32 *b,
@@ -292,7 +300,7 @@ public:
             int32 rka[TK] = 0 ... TK;
             int32 rkb[TK] = 0 ... TK;
             fp32 C[TM, TN] = 0;
-            int32 Fs = )" + std::to_string(Fs_) + R"(;
+            int32 ldlut = )" + std::to_string(Fs_) + R"(;
             int32 rabh[TM] = rxa / CW;
             int32 raw[TM] = rxa % CW - pad_w;
             int32 rab[TM] = rabh / CH;
@@ -308,12 +316,12 @@ public:
             fp32* pa[TM, TK] = a + ra1[newaxis, :] + ra0[:, newaxis];
             fp32* pb)" + BS + " = b + rkb" + bcb1 + ldb0 + " + rb0" + bcb0 + ldb1 + R"(;
             __constant__ int32* pincd[TK] = delta + rka;
-            __constant__ int32* pd[TK] = delta + Fs + rka;
+            __constant__ int32* pd[TK] = delta + ldlut + rka;
             int32 d[TK] = *pd;
             int32 incd[TK] = *pincd;
             int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + BH - AH, 0);
             int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + BW - AW, 0);
-            __constant__ int32* pm[TM] = masks + Fs + maskw*Fs + maskh*Fs*(2*pad_w + 1);
+            __constant__ int32* pm[TM] = masks + ldlut + maskw*ldlut + maskh*ldlut*(2*pad_w + 1);
             __constant__ int32* pincm[TM] = delta;
             int32 incm[TM] = *pincm;
             int32 checka0[TM] = *pm;
@@ -342,7 +350,7 @@ public:
             int32 rc1[TN] = get_global_range[TN](1);
             int32 rcn[TM] = rxc / (CH*CW);
             int32 rcpq[TM] = rxc % (CH*CW);
-            int32 rc0[TM] = rcn * ldc_n + rcpq;
+            int32 rc0[TM] = rcn * ldc_n + rcpq * ldc_q;
             fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];
             int1 checkc0[TM] = rxc < M;
             int1 checkc1[TN] = rc1 < N;
@@ -362,6 +370,9 @@ public:
         const tunable int32 TM = {16, 32, 64};
         const tunable int32 TN = {16, 32, 64};
         const tunable int32 TK = {8};
+
+        __constant__ int32* delta = alloc_const int32[2304];
+        __constant__ int32* masks = alloc_const int32[12000];
 
         void conv(read_only restrict fp32 *a,
                   read_only restrict fp32 *b,
@@ -416,10 +427,10 @@ public:
   }
 
   std::string src() {
-    if(ty_ == FPROP || ty_ == BPROP)
+//    if(ty_ == FPROP || ty_ == BPROP)
       return xprop();
-    else
-      return wgrad();
+//    else
+//      return wgrad();
   }
 
   template<class IN_DTYPE, class OUT_DTYPE>
@@ -554,7 +565,7 @@ private:
   std::vector<int32_t> ld_c_;
   // type
   type ty_;
-  bool is_bprop_;
+  bool b_trans_;
 };
 
 }
