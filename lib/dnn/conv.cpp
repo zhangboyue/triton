@@ -44,6 +44,7 @@ conv::conv(int B, int NC,
     pad_d_ = (CD_*stride_d_ - AD_*upsample_d_ + BD_ - 1 - stride_d_ + 1)/2;
     pad_h_ = (CH_*stride_h_ - AH_*upsample_h_ + BH_ - 1 - stride_h_ + 1)/2;
     pad_w_ = (CW_*stride_w_ - AW_*upsample_w_ + BW_ - 1 - stride_w_ + 1)/2;
+    std::swap(b_inner_idx_, b_outer_idx_);
   }
   // swap b and c for wgrad
   if(ty_ == WGRAD){
@@ -72,7 +73,7 @@ conv::conv(int B, int NC,
   set_ld(shapes_c_, ld_c_);
   // equivalent matmul
   b_trans_ = ty_ != BPROP;
-  b_lut_ = ty_ == WGRAD;
+  b_lut_ = true;
   if(ty_ == WGRAD) {
     M_ = shapes_c_[0]*shapes_c_[1]*shapes_c_[2]*shapes_c_[3];
     N_ = shapes_c_[4];
@@ -81,7 +82,7 @@ conv::conv(int B, int NC,
   else {
     M_ = shapes_c_[0]*shapes_c_[2]*shapes_c_[3]*shapes_c_[4];
     N_ = shapes_c_[1];
-    K_ = shapes_b_[0]*shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
+    K_ = shapes_b_[b_inner_idx_]*shapes_b_[b_pix_idx_]*shapes_b_[b_pix_idx_+1]*shapes_b_[b_pix_idx_+2];
   }
   // look-up table info
   if(ty_ == FPROP)
@@ -120,22 +121,23 @@ void conv::build_deltas(){
   if(b_lut_)
     h_b_deltas_.resize(Luts_);
 
-  auto unpack = [&](int32_t ltrs) {
+  auto unpack = [&](int32_t ltrs, bool flip) {
     int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (BD_*BH_*BW_);
     int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (BD_*BH_*BW_);
     int32_t tr = trs / BW_;
     int32_t s = trs % BW_;
     int32_t t = tr / BH_;
     int32_t r = tr % BH_;
-    if(!b_trans_){
+    if(flip){
       r = BH_ - 1 - r;
       s = BW_ - 1 - s;
     }
     return std::make_tuple(l, t, r, s);
   };
 
-  for(size_t i = 0; i < Luts_; ++i)
+  for(size_t i = 0; i < Luts_ - TK_; ++i){
     h_a_deltas_[i] = (((i + TK_) % Luts_) - i);
+  }
 
   size_t Ds0 = Luts_;
   size_t Ds1 = upsample_w_;
@@ -150,11 +152,11 @@ void conv::build_deltas(){
       // unpack
       int32_t ctrs = i;
       int32_t c, t, r, s;
-      std::tie(c, t, r, s) = unpack(ctrs);
+      std::tie(c, t, r, s) = unpack(ctrs, !b_trans_);
       // next indices
       int32_t nextctrs = ctrs + TK_;
       int32_t nextc, nextt, nextr, nexts;
-      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs);
+      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_);
       // diffs
       int32_t cdiff = nextc - c;
       int32_t tdiff = (nextt + pd)/upsample_d_ - (t + pd)/upsample_d_;
@@ -169,8 +171,8 @@ void conv::build_deltas(){
     for(size_t i = 0; i < Ds0; ++i) {
       int32_t c, t, r, s;
       int32_t nextc, nextt, nextr, nexts;
-      std::tie(c, t, r, s) = unpack(i);
-      std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_);
+      std::tie(c, t, r, s) = unpack(i, false);
+      std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false);
       int32_t cdiff = nextc - c;
       int32_t tdiff = nextt - t;
       int32_t rdiff = nextr - r;
@@ -301,11 +303,15 @@ void conv::set_arg(driver::kernel *kernel,
 }
 
 std::vector<unsigned> conv::default_params() {
-  if(b_lut_)
-    return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8};
+  if(b_lut_){
+    if(!b_trans_)
+      return {16, 2, 32, 16, 16, 8, 8, 2, 2, 4, 2, 8, 4, 2};
+    else
+      return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8};
+  }
   else if(ty_ == FPROP)
     return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4};
-  else if(ty_ == BPROP)
+  else
     return {32, 2, 64, 32, 64, 32, 4, 2, 2, 4, 2, 8, 4, 2};
 }
 

@@ -50,11 +50,12 @@ public:
     std::string bcb0  = b_trans_ ? "[:, newaxis]" : "[newaxis, :]";
     std::string bcb1  = b_trans_ ? "[newaxis, :]" : "[:, newaxis]";
     std::string ldb0  = b_trans_ ? "*ldb_s"       : "";
-    std::string ldb1  = b_trans_ ? "*ldb_k"       : "*ldb_c";
     std::string useb  = b_trans_ ? "trans(b)"     : "b";
     std::string flipr = b_trans_ ? ""             : "BH - 1 -";
     std::string flips = b_trans_ ? ""             : "BW - 1 -";
-    std::string ax    = b_trans_ ? "crs"          : "rsc";
+    std::vector<std::string> crs = {"c", "r", "s"};
+    std::vector<std::string> rsc = {"r", "s", "c"};
+    std::vector<std::string> ax  = b_trans_ ? crs : rsc;
     std::vector<std::string> redax;
     if(b_trans_)
       redax = {"C", "BH", "BW"};
@@ -123,11 +124,11 @@ public:
     fp32* pa[TM, TK] = a + ra1[newaxis, :] + ra0[:, newaxis];)";
   if(b_lut_){
    res += R"(
-    int32 rbcr[TK] = rkb / BW;
-    int32 rbs[TK] = rkb %  BW;
-    int32 rbc[TK] = rbcr / BH;
-    int32 rbr[TK] = rbcr % BH;
-    int32 rb1[TK] = rbc*ldb_c + rbr*ldb_r + ras*ldb_s;
+    int32 rb)" + ax[0] + ax[1] + "[TK] = rkb / " + redax[2] + R"(;
+    int32 rb)" + ax[2] + "[TK] = rkb %  " + redax[2] + R"(;
+    int32 rb)" + ax[0] + "[TK] = rb" + ax[0] + ax[1] + " / " + redax[1] + R"(;
+    int32 rb)" + ax[1] + "[TK] = rb" + ax[0] + ax[1] + " % " + redax[1] + R"(;
+    int32 rb1[TK] = rbc*ldb_c + rbr*ldb_r + rbs*ldb_s;
     )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + rkb;
     int32 db[TK] = *pdb;)";
   }
@@ -136,7 +137,7 @@ public:
     int32 rb1[TK] = rkb)" + ldb0 + ";";
   }
   res += R"(
-    fp32* pb)" + BS + " = b + rb1" + bcb1 + " + rb0" + bcb0 + ldb1 + R"(;
+    fp32* pb)" + BS + " = b + rb1" + bcb1 + " + rb0" + bcb0 + R"(*ldb_k;
     )" + a_delta_mem + R"( int32* pincd[TK] = delta + rka;
     )" + a_delta_mem + R"( int32* pda[TK]  = delta + ldlut + rka;
     int32 da[TK] = *pda;
