@@ -4,6 +4,17 @@
 namespace triton{
 namespace dnn{
 
+void conv::set_ld(const std::vector<int32_t>& shapes,
+                  std::vector<int32_t>& ld) {
+  size_t size = shapes.size();
+  ld.resize(size);
+  ld[4] = 1;
+  ld[3] = shapes[4]*ld[4];
+  ld[2] = shapes[3]*ld[3];
+  ld[1] = shapes[2]*ld[2];
+  ld[0] = shapes[1]*ld[1];
+}
+
 conv::conv(int B, int NC,
      int D, int H, int W,
      int T, int R, int S, int NF,
@@ -69,16 +80,6 @@ conv::conv(int B, int NC,
     std::swap(b_pix_idx_, c_pix_idx);
   }
   // leading dimensions
-  auto set_ld = [](const std::vector<int32_t>& shapes,
-               std::vector<int32_t>& ld) {
-    size_t size = shapes.size();
-    ld.resize(size);
-    ld[4] = 1;
-    ld[3] = shapes[4]*ld[4];
-    ld[2] = shapes[3]*ld[3];
-    ld[1] = shapes[2]*ld[2];
-    ld[0] = shapes[1]*ld[1];
-  };
   set_ld(shapes_a_, ld_a_);
   set_ld(shapes_b_, ld_b_);
   set_ld(shapes_c_, ld_c_);
@@ -191,7 +192,7 @@ void conv::build_deltas(){
 }
 
 void conv::build_masks(){
-  h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
+  h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*upsample_d_*upsample_h_*upsample_w_*Luts_);
 
   auto unpack = [&](int32_t ltrs){
     int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
@@ -207,21 +208,28 @@ void conv::build_masks(){
     return std::make_tuple(l, t, r, s);
   };
   size_t Ms0 = Luts_;
-  size_t Ms1 = 2*pad_w_ + 1;
-  size_t Ms2 = 2*pad_h_ + 1;
-  size_t Ms3 = 2*pad_d_ + 1;
-  for(size_t pd = 0; pd < Ms3; ++pd)
-  for(size_t ph = 0; ph < Ms2; ++ph)
-  for(size_t pw = 0; pw < Ms1; ++pw){
-    int32_t* masks_ptr = &h_masks_[Luts_ + pw*Ms0 + ph*Ms0*Ms1 + pd*Ms0*Ms1*Ms2];
+  size_t Ms1 = upsample_w_;
+  size_t Ms2 = upsample_h_;
+  size_t Ms3 = upsample_d_;
+  size_t Ms4 = 2*pad_w_ + 1;
+  size_t Ms5 = 2*pad_h_ + 1;
+  size_t Ms6 = 2*pad_d_ + 1;
+  for(size_t pd = 0; pd < Ms6; ++pd)
+  for(size_t ph = 0; ph < Ms5; ++ph)
+  for(size_t pw = 0; pw < Ms4; ++pw)
+  for(size_t ud = 0; ud < Ms3; ++ud)
+  for(size_t uh = 0; uh < Ms2; ++uh)
+  for(size_t uw = 0; uw < Ms1; ++uw){
+    int32_t* masks_ptr = &h_masks_[Luts_ + uw*Ms0 + uh*Ms0*Ms1 + ud*Ms0*Ms1*Ms2 +
+                                   pw*Ms0*Ms1*Ms2*Ms3 + ph*Ms0*Ms1*Ms2*Ms3*Ms4 + pd*Ms0*Ms1*Ms2*Ms3*Ms4*Ms5];
     for(size_t i = 0; i < Ms0; ++i){
        int32_t l, t, r, s;
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
          std::tie(l, t, r, s) = unpack(i + j);
-         bool in_bounds_d = (t + pd) >= pad_d_ && (t + pd) < (BD_ + pad_d_);
-         bool in_bounds_h = (r + ph) >= pad_h_ && (r + ph) < (BH_ + pad_h_);
-         bool in_bounds_w = (s + pw) >= pad_w_ && (s + pw) < (BW_ + pad_w_);
+         bool in_bounds_d = (t + pd) >= pad_d_ && (ud + t*upsample_d_ + pd) < (BD_ + pad_d_);
+         bool in_bounds_h = (r + ph) >= pad_h_ && (0 + r*upsample_h_ + ph) < (BH_ + pad_h_);
+         bool in_bounds_w = (s + pw) >= pad_w_ && (0 + s*upsample_w_ + pw) < (BW_ + pad_w_);
          mask |= (in_bounds_d && in_bounds_h && in_bounds_w) << j;
        }
        masks_ptr[i] = mask;

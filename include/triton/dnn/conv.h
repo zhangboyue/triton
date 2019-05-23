@@ -16,6 +16,11 @@ public:
     WGRAD
   };
 
+private:
+  void set_ld(const std::vector<int32_t>& shapes,
+                    std::vector<int32_t>& ld);
+
+public:
 
   conv(int B, int NC,
        int D, int H, int W,
@@ -145,7 +150,7 @@ public:
     int32 incd[TK] = *pincd;
     int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + BH - AH, 0);
     int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + BW - AW, 0);
-    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + maskw*ldlut + maskh*ldlut*(2*pad_w + 1);
+    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + 1*ldlut + 0*ldlut*upsample_w + maskw*upsample_w*upsample_h*ldlut + maskh*ldlut*upsample_w*upsample_h*(2*pad_w + 1);
     )" + a_delta_mem + R"( int32* pincm[TM] = delta;
     int32 incm[TM] = *pincm;
     int32 checka0[TM] = *pm;
