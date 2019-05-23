@@ -1,3 +1,4 @@
+#include <cmath>
 #include "triton/dnn/conv.h"
 
 namespace triton{

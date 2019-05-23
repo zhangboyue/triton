@@ -2,7 +2,7 @@ import torch
 from torch.nn.modules.utils import _single, _pair, _triple
 import math
 
-torch.ops.load_library("/home/philippe/Development/triton/build/examples/python/pytorch/libtorch_triton.so")
+torch.ops.load_library("/home/philippe/development/triton/build/examples/python/pytorch/libtorch_triton.so")
 
 class ConvFunction(torch.autograd.Function):
 

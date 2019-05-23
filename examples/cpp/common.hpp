@@ -1,5 +1,6 @@
 #include <vector>
 #include <chrono>
+#include <cmath>
 #include "triton/driver/device.h"
 #include <algorithm>
 
