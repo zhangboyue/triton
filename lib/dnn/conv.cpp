@@ -227,9 +227,9 @@ void conv::build_masks(){
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
          std::tie(l, t, r, s) = unpack(i + j);
-         bool in_bounds_d = (t + pd) >= pad_d_ && (ud + t*upsample_d_ + pd) < (BD_ + pad_d_);
-         bool in_bounds_h = (r + ph) >= pad_h_ && (0 + r*upsample_h_ + ph) < (BH_ + pad_h_);
-         bool in_bounds_w = (s + pw) >= pad_w_ && (0 + s*upsample_w_ + pw) < (BW_ + pad_w_);
+         bool in_bounds_d = (ud + t*upsample_d_ + pd) >= pad_d_ && (ud + t*upsample_d_ + pd) < (BD_ + pad_d_);
+         bool in_bounds_h = (uh + r*upsample_h_ + ph) >= pad_h_ && (uh + r*upsample_h_ + ph) < (BH_ + pad_h_);
+         bool in_bounds_w = (uw + s*upsample_w_ + pw) >= pad_w_ && (uw + s*upsample_w_ + pw) < (BW_ + pad_w_);
          mask |= (in_bounds_d && in_bounds_h && in_bounds_w) << j;
        }
        masks_ptr[i] = mask;
@@ -278,8 +278,8 @@ void conv::set_arg(driver::kernel *kernel,
   kernel->setArg(6, K_);
   kernel->setArg(7, AH_);
   kernel->setArg(8, AW_);
-  kernel->setArg(9, BH_);
-  kernel->setArg(10, BW_);
+  kernel->setArg(9, EBH_);
+  kernel->setArg(10, EBW_);
   kernel->setArg(11, CH_);
   kernel->setArg(12, CW_);
   // A arguments

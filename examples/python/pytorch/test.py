@@ -1,7 +1,7 @@
 import torch
 import triton
 
-x = torch.autograd.Variable(torch.ones(16, 64, 8, 8).cuda(), requires_grad=True)
+x = torch.autograd.Variable(torch.randn(16, 64, 8, 8).cuda(), requires_grad=True)
 bias = torch.autograd.Variable(torch.randn(64).cuda(), requires_grad=True)
 w = torch.autograd.Variable(torch.ones(64, 3, 3, 64).cuda(), requires_grad=True)
 cuw = torch.autograd.Variable(w.permute(3,0,1,2).cuda(), requires_grad=True)

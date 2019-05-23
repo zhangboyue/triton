@@ -117,6 +117,8 @@ public:
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
+    int32 uaw[TM] = raw % upsample_w;
+    int32 uah[TM] = rah % upsample_h;
     raw = (raw*stride_w - pad_w)/upsample_w;
     rah = (rah*stride_h - pad_h)/upsample_h;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
@@ -148,9 +150,9 @@ public:
     )" + a_delta_mem + R"( int32* pda[TK]  = delta + ldlut + rka;
     int32 da[TK] = *pda;
     int32 incd[TK] = *pincd;
-    int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + BH - AH, 0);
-    int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + BW - AW, 0);
-    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + 1*ldlut + 0*ldlut*upsample_w + maskw*upsample_w*upsample_h*ldlut + maskh*ldlut*upsample_w*upsample_h*(2*pad_w + 1);
+    int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + uah + BH - AH, 0);
+    int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + uaw + BW - AW, 0);
+    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + uaw*ldlut + uah*ldlut*upsample_w + maskw*upsample_w*upsample_h*ldlut + maskh*ldlut*upsample_w*upsample_h*(2*pad_w + 1);
     )" + a_delta_mem + R"( int32* pincm[TM] = delta;
     int32 incm[TM] = *pincm;
     int32 checka0[TM] = *pm;
