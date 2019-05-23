@@ -73,17 +73,10 @@ conv::conv(int B, int NC,
   set_ld(shapes_c_, ld_c_);
   // equivalent matmul
   b_trans_ = ty_ != BPROP;
-  b_lut_ = true;
-  if(ty_ == WGRAD) {
-    M_ = shapes_c_[0]*shapes_c_[1]*shapes_c_[2]*shapes_c_[3];
-    N_ = shapes_c_[4];
-    K_ = shapes_b_[0]*shapes_b_[2]*shapes_b_[3]*shapes_b_[4];
-  }
-  else {
-    M_ = shapes_c_[0]*shapes_c_[2]*shapes_c_[3]*shapes_c_[4];
-    N_ = shapes_c_[1];
-    K_ = shapes_b_[b_inner_idx_]*shapes_b_[b_pix_idx_]*shapes_b_[b_pix_idx_+1]*shapes_b_[b_pix_idx_+2];
-  }
+  b_lut_ = ty_ == WGRAD;
+  M_ = shapes_c_[c_outer_0_idx_]*shapes_c_[c_pix_idx]*shapes_c_[c_pix_idx+1]*shapes_c_[c_pix_idx+2];
+  N_ = shapes_c_[c_outer_1_idx_];
+  K_ = shapes_b_[b_inner_idx_]*shapes_b_[b_pix_idx_]*shapes_b_[b_pix_idx_+1]*shapes_b_[b_pix_idx_+2];
   // look-up table info
   if(ty_ == FPROP)
     Fs_ = shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
@@ -135,7 +128,7 @@ void conv::build_deltas(){
     return std::make_tuple(l, t, r, s);
   };
 
-  for(size_t i = 0; i < Luts_ - TK_; ++i){
+  for(size_t i = 0; i < Luts_; ++i){
     h_a_deltas_[i] = (((i + TK_) % Luts_) - i);
   }
 

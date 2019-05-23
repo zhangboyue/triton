@@ -62,6 +62,7 @@ public:
     else
       redax = {"BH", "BW", "N"};
     std::string inc_pb = b_lut_ ? "db" + bcb1 : "TK" + ldb0;
+    std::string inc_pdb = b_trans_ ? "incd" : "TK";
     std::string a_delta_mem = is_a_deltas_cst ? "__constant__" : "";
     std::string b_delta_mem = is_b_deltas_cst_? "__constant__" : "";
     std::string masks_mem = is_mask_cst_? "__constant__" : "";
@@ -160,7 +161,7 @@ public:
       pda = pda + incd;)";
   if(b_lut_){
     res += R"(
-      pdb = pdb + incd;
+      pdb = pdb + )" + inc_pdb + R"(;
       db = *pdb;)";
   }
     res += R"(
