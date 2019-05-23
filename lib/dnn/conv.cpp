@@ -35,16 +35,26 @@ conv::conv(int B, int NC,
   c_outer_0_idx_ = 0;
   c_outer_1_idx_ = 1;
   c_pix_idx = 2;
+  // effective filter size
+  EBD_ = BD_;
+  EBH_ = BH_;
+  EBW_ = BW_;
   // swap a and c for bprop
   if(ty_ == BPROP){
     std::swap(AD_, CD_);
     std::swap(AH_, CH_);
     std::swap(AW_, CW_);
     shapes_a_.swap(shapes_c_);
+    std::swap(stride_d_, upsample_d_);
+    std::swap(stride_h_, upsample_h_);
+    std::swap(stride_w_, upsample_w_);
     pad_d_ = (CD_*stride_d_ - AD_*upsample_d_ + BD_ - 1 - stride_d_ + 1)/2;
     pad_h_ = (CH_*stride_h_ - AH_*upsample_h_ + BH_ - 1 - stride_h_ + 1)/2;
     pad_w_ = (CW_*stride_w_ - AW_*upsample_w_ + BW_ - 1 - stride_w_ + 1)/2;
     std::swap(b_inner_idx_, b_outer_idx_);
+    EBD_ = BD_ / upsample_d_ + upsample_d_ - 1;
+    EBH_ = BH_ / upsample_h_ + upsample_h_ - 1;
+    EBW_ = BW_ / upsample_w_ + upsample_w_ - 1;
   }
   // swap b and c for wgrad
   if(ty_ == WGRAD){
@@ -72,11 +82,12 @@ conv::conv(int B, int NC,
   set_ld(shapes_b_, ld_b_);
   set_ld(shapes_c_, ld_c_);
   // equivalent matmul
+  bool upsampled_b = (ty_ == BPROP) && (upsample_d_ > 1 || upsample_h_ > 1 || upsample_w_ > 1);
   b_trans_ = ty_ != BPROP;
-  b_lut_ = ty_ == WGRAD;
+  b_lut_ = ty_ == WGRAD || upsampled_b;
   M_ = shapes_c_[c_outer_0_idx_]*shapes_c_[c_pix_idx]*shapes_c_[c_pix_idx+1]*shapes_c_[c_pix_idx+2];
   N_ = shapes_c_[c_outer_1_idx_];
-  K_ = shapes_b_[b_inner_idx_]*shapes_b_[b_pix_idx_]*shapes_b_[b_pix_idx_+1]*shapes_b_[b_pix_idx_+2];
+  K_ = shapes_b_[b_inner_idx_]*EBD_*EBH_*EBW_;
   // look-up table info
   if(ty_ == FPROP)
     Fs_ = shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
@@ -110,20 +121,23 @@ std::vector<int32_t> conv::c_shapes()
 { return shapes_c_; }
 
 void conv::build_deltas(){
-  h_a_deltas_.resize(Luts_ + upsample_d_*upsample_h_*upsample_w_*Luts_);
+  int32_t upsample_a_d = 1, upsample_a_h = 1, upsample_a_w = 1;
+  int32_t upsample_b_d = upsample_d_, upsample_b_h = upsample_h_, upsample_b_w = upsample_w_;
+
+  h_a_deltas_.resize(Luts_ + upsample_a_d*upsample_a_h*upsample_a_w*Luts_);
   if(b_lut_)
-    h_b_deltas_.resize(Luts_);
+    h_b_deltas_.resize(Luts_*upsample_b_d*upsample_b_h*upsample_b_w);
 
   auto unpack = [&](int32_t ltrs, bool flip) {
-    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (BD_*BH_*BW_);
-    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (BD_*BH_*BW_);
-    int32_t tr = trs / BW_;
-    int32_t s = trs % BW_;
-    int32_t t = tr / BH_;
-    int32_t r = tr % BH_;
+    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
+    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
+    int32_t tr = trs / EBW_;
+    int32_t s = trs % EBW_;
+    int32_t t = tr / EBH_;
+    int32_t r = tr % EBH_;
     if(flip){
-      r = BH_ - 1 - r;
-      s = BW_ - 1 - s;
+      r = EBH_ - 1 - r;
+      s = EBW_ - 1 - s;
     }
     return std::make_tuple(l, t, r, s);
   };
@@ -133,9 +147,9 @@ void conv::build_deltas(){
   }
 
   size_t Ds0 = Luts_;
-  size_t Ds1 = upsample_w_;
-  size_t Ds2 = upsample_h_;
-  size_t Ds3 = upsample_d_;
+  size_t Ds1 = upsample_a_w;
+  size_t Ds2 = upsample_a_h;
+  size_t Ds3 = upsample_a_d;
   for(size_t pd = 0; pd < Ds3; ++pd)
   for(size_t ph = 0; ph < Ds2; ++ph)
   for(size_t pw = 0; pw < Ds1; ++pw) {
@@ -152,9 +166,9 @@ void conv::build_deltas(){
       std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_);
       // diffs
       int32_t cdiff = nextc - c;
-      int32_t tdiff = (nextt + pd)/upsample_d_ - (t + pd)/upsample_d_;
-      int32_t rdiff = (nextr + ph)/upsample_h_ - (r + ph)/upsample_h_;
-      int32_t sdiff = (nexts + pw)/upsample_w_ - (s + pw)/upsample_w_;
+      int32_t tdiff = (nextt + pd)/upsample_a_d - (t + pd)/upsample_a_d;
+      int32_t rdiff = (nextr + ph)/upsample_a_h - (r + ph)/upsample_a_h;
+      int32_t sdiff = (nexts + pw)/upsample_a_w - (s + pw)/upsample_a_w;
       // delta pointers
       deltas_ptr[i] = cdiff*ld_a_[a_inner_idx_] + tdiff*ld_a_[a_pix_idx_] + rdiff*ld_a_[a_pix_idx_ + 1] + sdiff*ld_a_[a_pix_idx_ + 2];
     }
@@ -179,15 +193,15 @@ void conv::build_masks(){
   h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
 
   auto unpack = [&](int32_t ltrs){
-    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (BD_*BH_*BW_);
-    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (BD_*BH_*BW_);
-    int32_t tr = trs / BW_;
-    int32_t s = trs % BW_;
-    int32_t t = tr / BH_;
-    int32_t r = tr % BH_;
+    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
+    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
+    int32_t tr = trs / EBW_;
+    int32_t s = trs % EBW_;
+    int32_t t = tr / EBH_;
+    int32_t r = tr % EBH_;
     if(!b_trans_){
-      r = BH_ - 1 - r;
-      s = BW_ - 1 - s;
+      r = EBH_ - 1 - r;
+      s = EBW_ - 1 - s;
     }
     return std::make_tuple(l, t, r, s);
   };

@@ -112,8 +112,8 @@ public:
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
-    raw = raw*stride_w - pad_w;
-    rah = rah*stride_h - pad_h;
+    raw = (raw*stride_w - pad_w)/upsample_w;
+    rah = (rah*stride_h - pad_h)/upsample_h;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -219,6 +219,10 @@ private:
   int32_t BH_;
   int32_t BW_;
   int32_t NF_;
+  // effective filter size
+  int32_t EBD_;
+  int32_t EBH_;
+  int32_t EBW_;
   // activation size
   int32_t CD_;
   int32_t CH_;
