@@ -168,35 +168,35 @@ void conv::build_b_deltas(){
 }
 
 void conv::build_deltas(){
-  int32_t upsample_a_d = 1, upsample_a_h = 1, upsample_a_w = 1;
-  h_a_deltas_.resize(Luts_ + upsample_a_d*upsample_a_h*upsample_a_w*Luts_);
-
+  h_a_deltas_.resize(Luts_ + upsample_d_*upsample_h_*upsample_w_*Luts_);
   for(size_t i = 0; i < Luts_; ++i)
     h_a_deltas_[i] = (((i + TK_) % Luts_) - i);
-
   size_t Ds0 = Luts_;
-  size_t Ds1 = upsample_a_w;
-  size_t Ds2 = upsample_a_h;
-  size_t Ds3 = upsample_a_d;
-  for(size_t pd = 0; pd < Ds3; ++pd)
-  for(size_t ph = 0; ph < Ds2; ++ph)
-  for(size_t pw = 0; pw < Ds1; ++pw) {
-    int32_t* deltas_ptr = &h_a_deltas_[Luts_ + pw*Ds0 + ph*Ds0*Ds1 + pd*Ds0*Ds1*Ds2];
+  size_t Ds1 = upsample_w_;
+  size_t Ds2 = upsample_h_;
+  size_t Ds3 = upsample_d_;
+  for(size_t ud = 0; ud < Ds3; ++ud)
+  for(size_t uh = 0; uh < Ds2; ++uh)
+  for(size_t uw = 0; uw < Ds1; ++uw) {
+    int32_t* deltas_ptr = &h_a_deltas_[Luts_ + uw*Ds0 + uh*Ds0*Ds1 + ud*Ds0*Ds1*Ds2];
     // cumulative increments
     for(size_t i = 0; i < Ds0; ++i) {
+      int32_t EBD = 1;
+      int32_t EBH = ((upsample_h_ - uh - 1) + BH_) / upsample_h_;
+      int32_t EBW = ((upsample_w_ - uw - 1) + BW_) / upsample_w_;
       // unpack
       int32_t ctrs = i;
       int32_t c, t, r, s;
-      std::tie(c, t, r, s) = unpack(ctrs, !b_trans_, EBD_, EBH_, EBW_);
+      std::tie(c, t, r, s) = unpack(ctrs, !b_trans_, EBD, EBH, EBW);
       // next indices
       int32_t nextctrs = ctrs + TK_;
       int32_t nextc, nextt, nextr, nexts;
-      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_, EBD_, EBH_, EBW_);
+      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_, EBD, EBH, EBW);
       // diffs
       int32_t cdiff = nextc - c;
-      int32_t tdiff = (nextt + pd)/upsample_a_d - (t + pd)/upsample_a_d;
-      int32_t rdiff = (nextr + ph)/upsample_a_h - (r + ph)/upsample_a_h;
-      int32_t sdiff = (nexts + pw)/upsample_a_w - (s + pw)/upsample_a_w;
+      int32_t tdiff = nextt - t;
+      int32_t rdiff = nextr - r;
+      int32_t sdiff = nexts - s;
       // delta pointers
       deltas_ptr[i] = cdiff*ld_a_[a_inner_idx_] + tdiff*ld_a_[a_pix_idx_] + rdiff*ld_a_[a_pix_idx_ + 1] + sdiff*ld_a_[a_pix_idx_ + 2];
     }
@@ -204,24 +204,33 @@ void conv::build_deltas(){
 }
 
 void conv::build_masks(){
-  h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
+  h_masks_.resize(Luts_ + upsample_d_*upsample_h_*upsample_w_*(2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
 
   size_t Ms0 = Luts_;
-  size_t Ms4 = 2*pad_w_ + 1;
-  size_t Ms5 = 2*pad_h_ + 1;
-  size_t Ms6 = 2*pad_d_ + 1;
-  for(size_t pd = 0; pd < Ms6; ++pd)
-  for(size_t ph = 0; ph < Ms5; ++ph)
-  for(size_t pw = 0; pw < Ms4; ++pw){
-    int32_t* masks_ptr = &h_masks_[Luts_ + pw*Ms0 + ph*Ms0*Ms4 + pd*Ms0*Ms4*Ms5];
+  size_t Ms1 = 2*pad_w_ + 1;
+  size_t Ms2 = 2*pad_h_ + 1;
+  size_t Ms3 = 2*pad_d_ + 1;
+  size_t Ms4 = upsample_w_;
+  size_t Ms5 = upsample_h_;
+  size_t Ms6 = upsample_d_;
+  for(size_t ud = 0; ud < Ms6; ++ud)
+  for(size_t uh = 0; uh < Ms5; ++uh)
+  for(size_t uw = 0; uw < Ms4; ++uw)
+  for(size_t pd = 0; pd < Ms3; ++pd)
+  for(size_t ph = 0; ph < Ms2; ++ph)
+  for(size_t pw = 0; pw < Ms1; ++pw){
+    int32_t* masks_ptr = &h_masks_[Luts_ + pw*Ms0 + ph*Ms0*Ms1 + pd*Ms0*Ms1*Ms2 + uw*Ms0*Ms1*Ms2*Ms3 + uh*Ms0*Ms1*Ms2*Ms3*Ms4 + ud*Ms0*Ms1*Ms2*Ms3*Ms4*Ms5];
     for(size_t i = 0; i < Ms0; ++i){
        int32_t l, t, r, s;
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
-         std::tie(l, t, r, s) = unpack(i + j, !b_trans_, EBD_, EBH_, EBW_);
-         bool in_bounds_d = (t*upsample_d_ + pd) >= pad_d_ && (t*upsample_d_ + pd) < (BD_ + pad_d_);
-         bool in_bounds_h = (r*upsample_h_ + ph) >= pad_h_ && (r*upsample_h_ + ph) < (BH_ + pad_h_);
-         bool in_bounds_w = (s*upsample_w_ + pw) >= pad_w_ && (s*upsample_w_ + pw) < (BW_ + pad_w_);
+         int32_t EBD = 1;
+         int32_t EBH = ((upsample_h_ - uh - 1) + BH_) / upsample_h_;
+         int32_t EBW = ((upsample_w_ - uw - 1) + BW_) / upsample_w_;
+         std::tie(l, t, r, s) = unpack(i + j, !b_trans_, EBD, EBH, EBW);
+         bool in_bounds_d = (t + pd) >= pad_d_ && (t + pd) < (EBD + pad_d_);
+         bool in_bounds_h = (r + ph) >= pad_h_ && (r + ph) < (EBH + pad_h_);
+         bool in_bounds_w = (s + pw) >= pad_w_ && (s + pw) < (EBW + pad_w_);
          mask |= (in_bounds_d && in_bounds_h && in_bounds_w) << j;
        }
        masks_ptr[i] = mask;
@@ -332,6 +341,8 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
     kernel->setArg(6, K);
     kernel->setArg(9, EBH);
     kernel->setArg(10, EBW);
+    kernel->setArg(28, pad_h_);
+    kernel->setArg(29, pad_w_);
     kernel->setArg(34, off_uh);
     kernel->setArg(35, off_uw);
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
