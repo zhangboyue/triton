@@ -98,6 +98,8 @@ conv::conv(int B, int NC,
   TK_ = 8;
   Luts_ = (TK_ + Fs_ - 1) / Fs_ * Fs_;
   build_deltas();
+  if(b_lut_)
+    build_b_deltas();
   build_masks();
   size_t cst_size = h_b_deltas_.size()*4;
   is_b_deltas_cst_  = cst_size < 65536;
@@ -122,31 +124,43 @@ size_t conv::c_size()
 std::vector<int32_t> conv::c_shapes()
 { return shapes_c_; }
 
+
+std::tuple<int32_t, int32_t, int32_t, int32_t> conv::unpack(int32_t ltrs, bool flip) {
+  int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
+  int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
+  int32_t tr = trs / EBW_;
+  int32_t s = trs % EBW_;
+  int32_t t = tr / EBH_;
+  int32_t r = tr % EBH_;
+  if(flip){
+    r = EBH_ - 1 - r;
+    s = EBW_ - 1 - s;
+  }
+  return std::make_tuple(l, t, r, s);
+}
+
+void conv::build_b_deltas(){
+  h_b_deltas_.resize(Luts_*upsample_d_*upsample_h_*upsample_w_);
+
+  for(size_t i = 0; i < Luts_; ++i) {
+    int32_t c, t, r, s;
+    int32_t nextc, nextt, nextr, nexts;
+    std::tie(c, t, r, s) = unpack(i, false);
+    std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false);
+    int32_t cdiff = nextc - c;
+    int32_t tdiff = (nextt - t)*upsample_d_;
+    int32_t rdiff = (nextr - r)*upsample_h_;
+    int32_t sdiff = (nexts - s)*upsample_w_;
+    h_b_deltas_[i] = cdiff*ld_b_[b_inner_idx_] + tdiff*ld_b_[b_pix_idx_] + rdiff*ld_b_[b_pix_idx_ + 1] + sdiff*ld_b_[b_pix_idx_ + 2];
+  }
+}
+
 void conv::build_deltas(){
   int32_t upsample_a_d = 1, upsample_a_h = 1, upsample_a_w = 1;
-  int32_t upsample_b_d = upsample_d_, upsample_b_h = upsample_h_, upsample_b_w = upsample_w_;
-
   h_a_deltas_.resize(Luts_ + upsample_a_d*upsample_a_h*upsample_a_w*Luts_);
-  if(b_lut_)
-    h_b_deltas_.resize(Luts_*upsample_b_d*upsample_b_h*upsample_b_w);
 
-  auto unpack = [&](int32_t ltrs, bool flip) {
-    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
-    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
-    int32_t tr = trs / EBW_;
-    int32_t s = trs % EBW_;
-    int32_t t = tr / EBH_;
-    int32_t r = tr % EBH_;
-    if(flip){
-      r = EBH_ - 1 - r;
-      s = EBW_ - 1 - s;
-    }
-    return std::make_tuple(l, t, r, s);
-  };
-
-  for(size_t i = 0; i < Luts_; ++i){
+  for(size_t i = 0; i < Luts_; ++i)
     h_a_deltas_[i] = (((i + TK_) % Luts_) - i);
-  }
 
   size_t Ds0 = Luts_;
   size_t Ds1 = upsample_a_w;
@@ -175,38 +189,11 @@ void conv::build_deltas(){
       deltas_ptr[i] = cdiff*ld_a_[a_inner_idx_] + tdiff*ld_a_[a_pix_idx_] + rdiff*ld_a_[a_pix_idx_ + 1] + sdiff*ld_a_[a_pix_idx_ + 2];
     }
   }
-
-  if(b_lut_) {
-    for(size_t i = 0; i < Ds0; ++i) {
-      int32_t c, t, r, s;
-      int32_t nextc, nextt, nextr, nexts;
-      std::tie(c, t, r, s) = unpack(i, false);
-      std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false);
-      int32_t cdiff = nextc - c;
-      int32_t tdiff = (nextt - t)*upsample_d_;
-      int32_t rdiff = (nextr - r)*upsample_h_;
-      int32_t sdiff = (nexts - s)*upsample_w_;
-      h_b_deltas_[i] = cdiff*ld_b_[b_inner_idx_] + tdiff*ld_b_[b_pix_idx_] + rdiff*ld_b_[b_pix_idx_ + 1] + sdiff*ld_b_[b_pix_idx_ + 2];
-    }
-  }
 }
 
 void conv::build_masks(){
   h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
 
-  auto unpack = [&](int32_t ltrs){
-    int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
-    int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
-    int32_t tr = trs / EBW_;
-    int32_t s = trs % EBW_;
-    int32_t t = tr / EBH_;
-    int32_t r = tr % EBH_;
-    if(!b_trans_){
-      r = EBH_ - 1 - r;
-      s = EBW_ - 1 - s;
-    }
-    return std::make_tuple(l, t, r, s);
-  };
   size_t Ms0 = Luts_;
   size_t Ms4 = 2*pad_w_ + 1;
   size_t Ms5 = 2*pad_h_ + 1;
@@ -219,7 +206,7 @@ void conv::build_masks(){
        int32_t l, t, r, s;
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
-         std::tie(l, t, r, s) = unpack(i + j);
+         std::tie(l, t, r, s) = unpack(i + j, !b_trans_);
          bool in_bounds_d = (t*upsample_d_ + pd) >= pad_d_ && (t*upsample_d_ + pd) < (BD_ + pad_d_);
          bool in_bounds_h = (r*upsample_h_ + ph) >= pad_h_ && (r*upsample_h_ + ph) < (BH_ + pad_h_);
          bool in_bounds_w = (s*upsample_w_ + pw) >= pad_w_ && (s*upsample_w_ + pw) < (BW_ + pad_w_);
@@ -324,8 +311,15 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
   grid[0] /= upsample_h_*upsample_w_;
   kernel->setArg(11, CH_/upsample_h_);
   kernel->setArg(12, CW_/upsample_w_);
-  for(int32_t off_uh = 0; off_uh != upsample_h_; off_uh++)
-  for(int32_t off_uw = 0; off_uw != upsample_w_; off_uw++) {
+  for(int32_t off_uh = 0; off_uh < upsample_h_; off_uh++)
+  for(int32_t off_uw = 0; off_uw < upsample_w_; off_uw++) {
+    int32_t EBD = 1;
+    int32_t EBH = ((upsample_h_ - off_uh - 1) + BH_) / upsample_h_;
+    int32_t EBW = ((upsample_w_ - off_uw - 1) + BW_) / upsample_w_;
+    int32_t K = shapes_b_[b_inner_idx_]*EBD*EBH*EBW;
+    kernel->setArg(6, K);
+    kernel->setArg(9, EBH);
+    kernel->setArg(10, EBW);
     kernel->setArg(34, off_uh);
     kernel->setArg(35, off_uw);
     stream->enqueue(kernel, grid, {nthreads, 1, 1});

@@ -20,6 +20,9 @@ private:
   void set_ld(const std::vector<int32_t>& shapes,
                     std::vector<int32_t>& ld);
 
+  std::tuple<int32_t, int32_t, int32_t, int32_t>
+      unpack(int32_t ltrs, bool flip);
+
 public:
 
   conv(int B, int NC,
@@ -37,6 +40,7 @@ public:
   std::vector<int32_t> c_shapes();
 
   // initialize
+  void build_b_deltas();
   void build_deltas();
   void build_masks();
   void init(driver::stream *stream, driver::cu_module *module);
