@@ -183,16 +183,16 @@ void conv::build_deltas(){
       std::tie(c, t, r, s) = unpack(i, false);
       std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false);
       int32_t cdiff = nextc - c;
-      int32_t tdiff = nextt - t;
-      int32_t rdiff = nextr - r;
-      int32_t sdiff = nexts - s;
+      int32_t tdiff = (nextt - t)*upsample_d_;
+      int32_t rdiff = (nextr - r)*upsample_h_;
+      int32_t sdiff = (nexts - s)*upsample_w_;
       h_b_deltas_[i] = cdiff*ld_b_[b_inner_idx_] + tdiff*ld_b_[b_pix_idx_] + rdiff*ld_b_[b_pix_idx_ + 1] + sdiff*ld_b_[b_pix_idx_ + 2];
     }
   }
 }
 
 void conv::build_masks(){
-  h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*upsample_d_*upsample_h_*upsample_w_*Luts_);
+  h_masks_.resize(Luts_ + (2*pad_h_+1)*(2*pad_w_+1)*(2*pad_d_+1)*Luts_);
 
   auto unpack = [&](int32_t ltrs){
     int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
@@ -208,28 +208,21 @@ void conv::build_masks(){
     return std::make_tuple(l, t, r, s);
   };
   size_t Ms0 = Luts_;
-  size_t Ms1 = upsample_w_;
-  size_t Ms2 = upsample_h_;
-  size_t Ms3 = upsample_d_;
   size_t Ms4 = 2*pad_w_ + 1;
   size_t Ms5 = 2*pad_h_ + 1;
   size_t Ms6 = 2*pad_d_ + 1;
   for(size_t pd = 0; pd < Ms6; ++pd)
   for(size_t ph = 0; ph < Ms5; ++ph)
-  for(size_t pw = 0; pw < Ms4; ++pw)
-  for(size_t ud = 0; ud < Ms3; ++ud)
-  for(size_t uh = 0; uh < Ms2; ++uh)
-  for(size_t uw = 0; uw < Ms1; ++uw){
-    int32_t* masks_ptr = &h_masks_[Luts_ + uw*Ms0 + uh*Ms0*Ms1 + ud*Ms0*Ms1*Ms2 +
-                                   pw*Ms0*Ms1*Ms2*Ms3 + ph*Ms0*Ms1*Ms2*Ms3*Ms4 + pd*Ms0*Ms1*Ms2*Ms3*Ms4*Ms5];
+  for(size_t pw = 0; pw < Ms4; ++pw){
+    int32_t* masks_ptr = &h_masks_[Luts_ + pw*Ms0 + ph*Ms0*Ms4 + pd*Ms0*Ms4*Ms5];
     for(size_t i = 0; i < Ms0; ++i){
        int32_t l, t, r, s;
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
          std::tie(l, t, r, s) = unpack(i + j);
-         bool in_bounds_d = (ud + t*upsample_d_ + pd) >= pad_d_ && (ud + t*upsample_d_ + pd) < (BD_ + pad_d_);
-         bool in_bounds_h = (uh + r*upsample_h_ + ph) >= pad_h_ && (uh + r*upsample_h_ + ph) < (BH_ + pad_h_);
-         bool in_bounds_w = (uw + s*upsample_w_ + pw) >= pad_w_ && (uw + s*upsample_w_ + pw) < (BW_ + pad_w_);
+         bool in_bounds_d = (t*upsample_d_ + pd) >= pad_d_ && (t*upsample_d_ + pd) < (BD_ + pad_d_);
+         bool in_bounds_h = (r*upsample_h_ + ph) >= pad_h_ && (r*upsample_h_ + ph) < (BH_ + pad_h_);
+         bool in_bounds_w = (s*upsample_w_ + pw) >= pad_w_ && (s*upsample_w_ + pw) < (BW_ + pad_w_);
          mask |= (in_bounds_d && in_bounds_h && in_bounds_w) << j;
        }
        masks_ptr[i] = mask;
@@ -309,13 +302,34 @@ void conv::set_arg(driver::kernel *kernel,
   // dilate
   kernel->setArg(32, upsample_h_);
   kernel->setArg(33, upsample_w_);
-  size_t idx = 34;
+  kernel->setArg(34, (int32_t)0);
+  kernel->setArg(35, (int32_t)0);
+  size_t idx = 36;
   if(!is_a_deltas_cst)
     kernel->setArg(idx++, d_a_deltas_);
   if(!is_b_deltas_cst_)
     kernel->setArg(idx++, d_b_deltas_);
   if(!is_mask_cst_)
     kernel->setArg(idx++, d_masks_);
+}
+
+void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
+                   driver::buffer *a, driver::buffer *b, driver::buffer *c, driver::buffer *bias,
+                   size_t TM, size_t TN, size_t nthreads) {
+  set_arg(kernel, a, b, c, bias);
+  std::array<size_t, 3> grid = {1};
+  grid[0] = (M_ + TM - 1)/TM;
+  grid[1] = (N_ + TN - 1)/TN;
+  grid[2] = 1;
+  grid[0] /= upsample_h_*upsample_w_;
+  kernel->setArg(11, CH_/upsample_h_);
+  kernel->setArg(12, CW_/upsample_w_);
+  for(int32_t off_uh = 0; off_uh != upsample_h_; off_uh++)
+  for(int32_t off_uw = 0; off_uw != upsample_w_; off_uw++) {
+    kernel->setArg(34, off_uh);
+    kernel->setArg(35, off_uw);
+    stream->enqueue(kernel, grid, {nthreads, 1, 1});
+  }
 }
 
 std::vector<unsigned> conv::default_params() {

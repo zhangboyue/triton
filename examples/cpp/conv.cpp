@@ -43,16 +43,13 @@ int main() {
   // benchmark a given convolution kernel
   auto benchmark = [&](triton::driver::kernel* kernel,
                        triton::jit::launch_information info) {
+    configuration.init(stream, (triton::driver::cu_module*)kernel->module());
     unsigned TM = info.global_range_size[0];
     unsigned TN = info.global_range_size[1];
     unsigned nthreads = info.num_threads;
-    std::array<size_t, 3> grid = configuration.get_grid(TM, TN);
-    configuration.init(stream, (triton::driver::cu_module*)kernel->module());
+    configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, nthreads);
     stream->synchronize();
-    configuration.set_arg(kernel, da, db, dc, nullptr);
-    stream->enqueue(kernel, grid, {nthreads, 1, 1});
-    stream->synchronize();
-    double ts = bench([&](){stream->enqueue(kernel, grid, {nthreads, 1, 1});},
+    double ts = bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, nthreads); },
                       [&](){ stream->synchronize(); }, *context->device());
     return configuration.get_nflops() / ts * 1e-3;
   };

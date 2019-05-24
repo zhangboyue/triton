@@ -44,6 +44,10 @@ public:
   void set_arg(driver::kernel *kernel,
                driver::buffer *a, driver::buffer *b, driver::buffer *c,
                driver::buffer *bias);
+  void enqueue(driver::stream *stream, driver::kernel *kernel,
+               driver::buffer *a, driver::buffer *b, driver::buffer *c,
+               driver::buffer *bias,
+               size_t TM, size_t TN, size_t nthreads);
 
   // utilities
   size_t get_nflops();
@@ -99,7 +103,8 @@ public:
              int32 ldc_n, int32 ldc_k, int32 ldc_m, int32 ldc_p, int32 ldc_q,
              int32 pad_h, int32 pad_w,
              int32 stride_h, int32 stride_w,
-             int32 upsample_h, int32 upsample_w)";
+             int32 upsample_h, int32 upsample_w,
+             int32 off_uh, int32 off_uw)";
   if(!is_a_deltas_cst)
     res += ", int32* delta";
   if(b_lut_ && !is_b_deltas_cst_)
@@ -117,10 +122,10 @@ public:
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
-    int32 uaw[TM] = raw % upsample_w;
-    int32 uah[TM] = rah % upsample_h;
-    raw = (raw*stride_w - pad_w)/upsample_w;
-    rah = (rah*stride_h - pad_h)/upsample_h;
+    rah = rah*upsample_h;
+    raw = raw*upsample_w;
+    raw = (raw*stride_w + off_uw - pad_w)/upsample_w;
+    rah = (rah*stride_h + off_uh - pad_h)/upsample_h;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -136,7 +141,7 @@ public:
     int32 rb)" + ax[2] + "[TK] = rkb %  " + redax[2] + R"(;
     int32 rb)" + ax[0] + "[TK] = rb" + ax[0] + ax[1] + " / " + redax[1] + R"(;
     int32 rb)" + ax[1] + "[TK] = rb" + ax[0] + ax[1] + " % " + redax[1] + R"(;
-    int32 rb1[TK] = rbc*ldb_c + rbr*ldb_r + rbs*ldb_s;
+    int32 rb1[TK] = rbc*ldb_c + rbr*upsample_h*ldb_r + rbs*upsample_w*ldb_s;
     )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + rkb;
     int32 db[TK] = *pdb;)";
   }
@@ -150,9 +155,9 @@ public:
     )" + a_delta_mem + R"( int32* pda[TK]  = delta + ldlut + rka;
     int32 da[TK] = *pda;
     int32 incd[TK] = *pincd;
-    int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + uah + BH - AH, 0);
-    int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + uaw + BW - AW, 0);
-    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + uaw*ldlut + uah*ldlut*upsample_w + maskw*upsample_w*upsample_h*ldlut + maskh*ldlut*upsample_w*upsample_h*(2*pad_w + 1);
+    int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + BH - AH, 0);
+    int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + BW - AW, 0);
+    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + maskw*ldlut + maskh*ldlut*(2*pad_w + 1);
     )" + a_delta_mem + R"( int32* pincm[TM] = delta;
     int32 incm[TM] = *pincm;
     int32 checka0[TM] = *pm;
@@ -187,7 +192,11 @@ public:
     int32 rc1[TN] = get_global_range[TN](1);
     int32 rcn[TM] = rxc / (CH*CW);
     int32 rcpq[TM] = rxc % (CH*CW);
-    int32 rc0[TM] = rcn * ldc_n + rcpq * ldc_q;
+    int32 rcp[TM] = rcpq / CW;
+    int32 rcq[TM] = rcpq % CW;
+    rcp = rcp * upsample_h + off_uh;
+    rcq = rcq * upsample_w + off_uw;
+    int32 rc0[TM] = rcn * ldc_n + rcp * ldc_p + rcq * ldc_q;
     fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];)";
   if(bias_ && ty_==FPROP){
     res += R"(

@@ -82,11 +82,9 @@ torch::Tensor conv_common(
   // launch info
   unsigned TM = info.global_range_size[0];
   unsigned TN = info.global_range_size[1];
-  // launch info
   unsigned nthreads = info.num_threads;
-  std::array<size_t, 3> grid = configuration->get_grid(TM, TN);
-  configuration->set_arg(kernel, &a, &b, &c, bias);
-  stream->enqueue(kernel, grid, {nthreads, 1, 1});
+  // enqueue
+  configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, nthreads);
   return torchc;
 }
 
