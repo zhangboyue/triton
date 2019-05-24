@@ -21,7 +21,7 @@ private:
                     std::vector<int32_t>& ld);
 
   std::tuple<int32_t, int32_t, int32_t, int32_t>
-      unpack(int32_t ltrs, bool flip);
+      unpack(int32_t ltrs, bool flip, int32_t EBD, int32_t EBH, int32_t EBW);
 
 public:
 
@@ -126,10 +126,10 @@ public:
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
-    rah = rah*upsample_h;
-    raw = raw*upsample_w;
-    raw = (raw*stride_w + off_uw - pad_w)/upsample_w;
-    rah = (rah*stride_h + off_uh - pad_h)/upsample_h;
+    rah = (off_uh + rah)*upsample_h;
+    raw = (off_uw + raw)*upsample_w;
+    raw = (raw*stride_w - pad_w)/upsample_w;
+    rah = (rah*stride_h - pad_h)/upsample_h;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -145,8 +145,10 @@ public:
     int32 rb)" + ax[2] + "[TK] = rkb %  " + redax[2] + R"(;
     int32 rb)" + ax[0] + "[TK] = rb" + ax[0] + ax[1] + " / " + redax[1] + R"(;
     int32 rb)" + ax[1] + "[TK] = rb" + ax[0] + ax[1] + " % " + redax[1] + R"(;
-    int32 rb1[TK] = rbc*ldb_c + rbr*upsample_h*ldb_r + rbs*upsample_w*ldb_s;
-    )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + rkb;
+    rbr = rbr*upsample_h + off_uh;
+    rbs = rbs*upsample_w + off_uw;
+    int32 rb1[TK] = rbc*ldb_c + rbr*ldb_r + rbs*ldb_s;
+    )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + rkb + off_uw*ldlut + off_uh*ldlut*upsample_h;
     int32 db[TK] = *pdb;)";
   }
   else{

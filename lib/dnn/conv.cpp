@@ -125,16 +125,16 @@ std::vector<int32_t> conv::c_shapes()
 { return shapes_c_; }
 
 
-std::tuple<int32_t, int32_t, int32_t, int32_t> conv::unpack(int32_t ltrs, bool flip) {
-  int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD_*EBH_*EBW_);
-  int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD_*EBH_*EBW_);
-  int32_t tr = trs / EBW_;
-  int32_t s = trs % EBW_;
-  int32_t t = tr / EBH_;
-  int32_t r = tr % EBH_;
+std::tuple<int32_t, int32_t, int32_t, int32_t> conv::unpack(int32_t ltrs, bool flip, int32_t EBD, int32_t EBH, int32_t EBW) {
+  int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD*EBH*EBW);
+  int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD*EBH*EBW);
+  int32_t tr = trs / EBW;
+  int32_t s = trs % EBW;
+  int32_t t = tr / EBH;
+  int32_t r = tr % EBH;
   if(flip){
-    r = EBH_ - 1 - r;
-    s = EBW_ - 1 - s;
+    r = EBH - 1 - r;
+    s = EBW - 1 - s;
   }
   return std::make_tuple(l, t, r, s);
 }
@@ -142,16 +142,28 @@ std::tuple<int32_t, int32_t, int32_t, int32_t> conv::unpack(int32_t ltrs, bool f
 void conv::build_b_deltas(){
   h_b_deltas_.resize(Luts_*upsample_d_*upsample_h_*upsample_w_);
 
-  for(size_t i = 0; i < Luts_; ++i) {
-    int32_t c, t, r, s;
-    int32_t nextc, nextt, nextr, nexts;
-    std::tie(c, t, r, s) = unpack(i, false);
-    std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false);
-    int32_t cdiff = nextc - c;
-    int32_t tdiff = (nextt - t)*upsample_d_;
-    int32_t rdiff = (nextr - r)*upsample_h_;
-    int32_t sdiff = (nexts - s)*upsample_w_;
-    h_b_deltas_[i] = cdiff*ld_b_[b_inner_idx_] + tdiff*ld_b_[b_pix_idx_] + rdiff*ld_b_[b_pix_idx_ + 1] + sdiff*ld_b_[b_pix_idx_ + 2];
+  size_t Ds0 = Luts_;
+  size_t Ds1 = upsample_w_;
+  size_t Ds2 = upsample_h_;
+  size_t Ds3 = upsample_d_;
+  for(size_t ud = 0; ud < Ds3; ++ud)
+  for(size_t uh = 0; uh < Ds2; ++uh)
+  for(size_t uw = 0; uw < Ds1; ++uw) {
+    int32_t* deltas_ptr = &h_b_deltas_[uw*Ds0 + uh*Ds0*Ds1 + ud*Ds0*Ds1*Ds2];
+    for(size_t i = 0; i < Luts_; ++i) {
+      int32_t EBD = 1;
+      int32_t EBH = ((upsample_h_ - uh - 1) + BH_) / upsample_h_;
+      int32_t EBW = ((upsample_w_ - uw - 1) + BW_) / upsample_w_;
+      int32_t c, t, r, s;
+      int32_t nextc, nextt, nextr, nexts;
+      std::tie(c, t, r, s) = unpack(i, false, EBD, EBH, EBW);
+      std::tie(nextc, nextt, nextr, nexts) = unpack(i + TK_, false, EBD, EBH, EBW);
+      int32_t cdiff = nextc - c;
+      int32_t tdiff = (nextt - t)*upsample_d_;
+      int32_t rdiff = (nextr - r)*upsample_h_;
+      int32_t sdiff = (nexts - s)*upsample_w_;
+      deltas_ptr[i] = cdiff*ld_b_[b_inner_idx_] + tdiff*ld_b_[b_pix_idx_] + rdiff*ld_b_[b_pix_idx_ + 1] + sdiff*ld_b_[b_pix_idx_ + 2];
+    }
   }
 }
 
@@ -175,11 +187,11 @@ void conv::build_deltas(){
       // unpack
       int32_t ctrs = i;
       int32_t c, t, r, s;
-      std::tie(c, t, r, s) = unpack(ctrs, !b_trans_);
+      std::tie(c, t, r, s) = unpack(ctrs, !b_trans_, EBD_, EBH_, EBW_);
       // next indices
       int32_t nextctrs = ctrs + TK_;
       int32_t nextc, nextt, nextr, nexts;
-      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_);
+      std::tie(nextc, nextt, nextr, nexts) = unpack(nextctrs, !b_trans_, EBD_, EBH_, EBW_);
       // diffs
       int32_t cdiff = nextc - c;
       int32_t tdiff = (nextt + pd)/upsample_a_d - (t + pd)/upsample_a_d;
@@ -206,7 +218,7 @@ void conv::build_masks(){
        int32_t l, t, r, s;
        int32_t mask = 0x0;
        for(size_t j = 0; j < TK_; ++j){
-         std::tie(l, t, r, s) = unpack(i + j, !b_trans_);
+         std::tie(l, t, r, s) = unpack(i + j, !b_trans_, EBD_, EBH_, EBW_);
          bool in_bounds_d = (t*upsample_d_ + pd) >= pad_d_ && (t*upsample_d_ + pd) < (BD_ + pad_d_);
          bool in_bounds_h = (r*upsample_h_ + ph) >= pad_h_ && (r*upsample_h_ + ph) < (BH_ + pad_h_);
          bool in_bounds_w = (s*upsample_w_ + pw) >= pad_w_ && (s*upsample_w_ + pw) < (BW_ + pad_w_);
