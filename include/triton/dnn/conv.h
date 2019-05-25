@@ -241,10 +241,6 @@ private:
   int32_t BH_;
   int32_t BW_;
   int32_t NF_;
-  // effective filter size
-  int32_t EBD_;
-  int32_t EBH_;
-  int32_t EBW_;
   // activation size
   int32_t CD_;
   int32_t CH_;

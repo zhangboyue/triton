@@ -47,10 +47,6 @@ conv::conv(int B, int NC,
   c_outer_0_idx_ = 0;
   c_outer_1_idx_ = 1;
   c_pix_idx = 2;
-  // effective filter size
-  EBD_ = BD_;
-  EBH_ = BH_;
-  EBW_ = BW_;
   // swap a and c for bprop
   if(ty_ == BPROP){
     std::swap(AD_, CD_);
@@ -64,9 +60,6 @@ conv::conv(int B, int NC,
     pad_h_ = (CH_*stride_h_ - AH_*upsample_h_ + BH_ - 1 - stride_h_ + 1)/2;
     pad_w_ = (CW_*stride_w_ - AW_*upsample_w_ + BW_ - 1 - stride_w_ + 1)/2;
     std::swap(b_inner_idx_, b_outer_idx_);
-    EBD_ = BD_ / upsample_d_ + upsample_d_ - 1;
-    EBH_ = BH_ / upsample_h_ + upsample_h_ - 1;
-    EBW_ = BW_ / upsample_w_ + upsample_w_ - 1;
   }
   // swap b and c for wgrad
   if(ty_ == WGRAD){
@@ -89,7 +82,7 @@ conv::conv(int B, int NC,
   b_lut_ = ty_ == WGRAD || upsampled_b;
   M_ = shapes_c_[c_outer_0_idx_]*shapes_c_[c_pix_idx]*shapes_c_[c_pix_idx+1]*shapes_c_[c_pix_idx+2];
   N_ = shapes_c_[c_outer_1_idx_];
-  K_ = shapes_b_[b_inner_idx_]*EBD_*EBH_*EBW_;
+  K_ = shapes_b_[b_inner_idx_]*BD_*BH_*BW_;
   // look-up table info
   if(ty_ == FPROP)
     Fs_ = shapes_b_[1]*shapes_b_[2]*shapes_b_[3];
@@ -279,8 +272,8 @@ void conv::set_arg(driver::kernel *kernel,
   kernel->setArg(6, K_);
   kernel->setArg(7, AH_);
   kernel->setArg(8, AW_);
-  kernel->setArg(9, EBH_);
-  kernel->setArg(10, EBW_);
+  kernel->setArg(9, BH_);
+  kernel->setArg(10, BW_);
   kernel->setArg(11, CH_);
   kernel->setArg(12, CW_);
   // A arguments
