@@ -190,6 +190,11 @@ void conv::build_deltas(){
       int32_t tdiff = nextt - t;
       int32_t rdiff = nextr - r;
       int32_t sdiff = nexts - s;
+      if(ty_ == WGRAD){
+        tdiff = tdiff * stride_d_;
+        rdiff = rdiff * stride_h_;
+        sdiff = sdiff * stride_w_;
+      }
       // delta pointers
       deltas_ptr[i] = cdiff*ld_a_[a_inner_idx_] + tdiff*ld_a_[a_pix_idx_] + rdiff*ld_a_[a_pix_idx_ + 1] + sdiff*ld_a_[a_pix_idx_ + 2];
     }

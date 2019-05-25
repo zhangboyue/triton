@@ -66,6 +66,10 @@ public:
     std::string useb  = b_trans_ ? "trans(b)"     : "b";
     std::string flipr = b_trans_ ? ""             : "BH - 1 -";
     std::string flips = b_trans_ ? ""             : "BW - 1 -";
+    std::string upar = ty_ == WGRAD ? "stride_h * ": "";
+    std::string upas = ty_ == WGRAD ? "stride_w * ": "";
+    std::string upah = ty_ == WGRAD ? "": "*stride_h";
+    std::string upaw = ty_ == WGRAD ? "": "*stride_w";
     std::vector<std::string> crs = {"c", "r", "s"};
     std::vector<std::string> rsc = {"r", "s", "c"};
     std::vector<std::string> ax  = b_trans_ ? crs : rsc;
@@ -128,8 +132,8 @@ public:
     int32 rah[TM] = rabh % CH;
     raw = (off_uw + raw)*upsample_w;
     rah = (off_uh + rah)*upsample_h;
-    raw = (raw*stride_w - pad_w)/upsample_w;
-    rah = (rah*stride_h - pad_h)/upsample_h;
+    raw = (raw)" + upah + R"( - pad_w)/upsample_w;
+    rah = (rah)" + upaw + R"( - pad_h)/upsample_h;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -137,6 +141,8 @@ public:
     int32 ra)" + ax[1] + "[TK] = ra" + ax[0] + ax[1] + " % " + redax[1] + R"(;
     rar = )" + flipr + R"( rar;
     ras = )" + flips + R"( ras;
+    rar = )" + upar + R"( rar;
+    ras = )" + upas + R"( ras;
     int32 ra1[TK] = rac*lda_c + rar*lda_h + ras*lda_w;
     fp32* pa[TM, TK] = a + ra1[newaxis, :] + ra0[:, newaxis];)";
   if(b_lut_){
