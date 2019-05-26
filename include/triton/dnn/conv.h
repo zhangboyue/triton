@@ -173,14 +173,13 @@ public:
     )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + maskw*ldlut + maskh*ldlut*(2*pad_w + 1) + off_uw*ldlut*(2*pad_w+1)*(2*pad_h+1) + off_uh*ldlut*(2*pad_w+1)*(2*pad_h+1)*upsample_w;
     )" + a_delta_mem + R"( int32* pincm[TM] = delta;
     int32 incm[TM] = *pincm;
-    int32 checka0[TM] = *pm;
-    int32 checka1[TK] = 1 << rka;
-    int1 checka[TM, TK] = (checka0[:, newaxis] & checka1[newaxis, :]) > 0;
+    int32 maska0[TM] = *pm;
+    int32 maska1[TK] = 1 << rka;
+    int1 checka[TM, TK] = (maska0[:, newaxis] & maska1[newaxis, :]) > 0;
     int1 checkb0[TN] = rb0 < N;
     int1 checkb)" + BS + " = checkb0" + bcb0 + R"(;
     fp32 a[TM, TK] = checka ? *pa : 0;
     fp32 b)" + BS + R"( = checkb ? *pb : 0;
-    rka = rka + TK;
     for(int32 k = K; k > 0; k = k - TK){
       C = dot(a, )" + useb + R"(, C);
       pa = pa + da[newaxis, :];
@@ -199,13 +198,21 @@ public:
       incd = *pincd;
       pm = pm + incm;
       pincm = pincm + incm;
-      incm = *pincm;
-      int32 rkac[TK] = rka / (BH*BW);
+      incm = *pincm;)";
+  if((ty_ == FPROP) && (NC_ % TK_ != 0)){
+    res += R"(
       rka = rka + TK;
-      int1 checkaa1[TK] = rkac < NC;
-      checka0 = *pm;
-      checka = (checka0[:, newaxis] & checka1[newaxis, :]) > 0;
-      checka = checka && checkaa1[newaxis,:];
+      int32 rkac[TK] = rka / (BH*BW);
+      int1 checka1[TK] = rkac < NC;)";
+  }
+  else{
+    res += R"(
+      int1 checka1[TK] = k > TK;)";
+  }
+    res += R"(
+      maska0 = *pm;
+      checka = (maska0[:, newaxis] & maska1[newaxis, :]) > 0;
+      checka = checka && checka1[newaxis,:];
       a = checka ? *pa : 0;
     }
     int32 rxc[TM] = get_global_range[TM](0);
