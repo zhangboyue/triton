@@ -60,6 +60,7 @@ conv::conv(int B, int NC,
     pad_h_ = (CH_*stride_h_ - AH_*upsample_h_ + BH_ - 1 - stride_h_ + 1)/2;
     pad_w_ = (CW_*stride_w_ - AW_*upsample_w_ + BW_ - 1 - stride_w_ + 1)/2;
     std::swap(b_inner_idx_, b_outer_idx_);
+    std::swap(NC_, NF_);
   }
   // swap b and c for wgrad
   if(ty_ == WGRAD){
@@ -119,12 +120,21 @@ std::vector<int32_t> conv::c_shapes()
 
 
 std::tuple<int32_t, int32_t, int32_t, int32_t> conv::unpack(int32_t ltrs, bool flip, int32_t EBD, int32_t EBH, int32_t EBW) {
-  int32_t l = (!b_trans_) ? ltrs % NF_ : ltrs / (EBD*EBH*EBW);
-  int32_t trs = (!b_trans_) ? ltrs / NF_ : ltrs % (EBD*EBH*EBW);
-  int32_t tr = trs / EBW;
-  int32_t s = trs % EBW;
-  int32_t t = tr / EBH;
-  int32_t r = tr % EBH;
+  int32_t l, t, r, s;
+  if(b_trans_){
+    l = ltrs / (EBD*EBH*EBW);
+    int32_t trs = ltrs % (EBD*EBH*EBW);
+    int32_t tr = trs / EBW;
+    s = trs % EBW;
+    t = tr / EBH;
+    r = tr % EBH;
+  }
+  else{
+    int32_t rs = ltrs / NC_;
+    l = ltrs % NC_;
+    r = rs / EBW;
+    s = rs % EBW;
+  }
   if(flip){
     r = EBH - 1 - r;
     s = EBW - 1 - s;
@@ -287,36 +297,37 @@ void conv::set_arg(driver::kernel *kernel,
   kernel->setArg(10, BW_);
   kernel->setArg(11, CH_);
   kernel->setArg(12, CW_);
+  kernel->setArg(13, NC_);
   // A arguments
-  kernel->setArg(13, ld_a_[a_outer_idx_]);
-  kernel->setArg(14, ld_a_[a_inner_idx_]);
-  kernel->setArg(15, ld_a_[2]);
-  kernel->setArg(16, ld_a_[3]);
-  kernel->setArg(17, ld_a_[4]);
+  kernel->setArg(14, ld_a_[a_outer_idx_]);
+  kernel->setArg(15, ld_a_[a_inner_idx_]);
+  kernel->setArg(16, ld_a_[2]);
+  kernel->setArg(17, ld_a_[3]);
+  kernel->setArg(18, ld_a_[4]);
   // B arguments
-  kernel->setArg(18, ld_b_[b_inner_idx_]);
-  kernel->setArg(19, ld_b_[b_pix_idx_]);
-  kernel->setArg(20, ld_b_[b_pix_idx_+1]);
-  kernel->setArg(21, ld_b_[b_pix_idx_+2]);
-  kernel->setArg(22, ld_b_[b_outer_idx_]);
+  kernel->setArg(19, ld_b_[b_inner_idx_]);
+  kernel->setArg(20, ld_b_[b_pix_idx_]);
+  kernel->setArg(21, ld_b_[b_pix_idx_+1]);
+  kernel->setArg(22, ld_b_[b_pix_idx_+2]);
+  kernel->setArg(23, ld_b_[b_outer_idx_]);
   // C arguments
-  kernel->setArg(23, ld_c_[c_outer_0_idx_]);
-  kernel->setArg(24, ld_c_[c_outer_1_idx_]);
-  kernel->setArg(25, ld_c_[c_pix_idx]);
-  kernel->setArg(26, ld_c_[c_pix_idx+1]);
-  kernel->setArg(27, ld_c_[c_pix_idx+2]);
+  kernel->setArg(24, ld_c_[c_outer_0_idx_]);
+  kernel->setArg(25, ld_c_[c_outer_1_idx_]);
+  kernel->setArg(26, ld_c_[c_pix_idx]);
+  kernel->setArg(27, ld_c_[c_pix_idx+1]);
+  kernel->setArg(28, ld_c_[c_pix_idx+2]);
   // pad
-  kernel->setArg(28, pad_h_);
-  kernel->setArg(29, pad_w_);
+  kernel->setArg(29, pad_h_);
+  kernel->setArg(30, pad_w_);
   // stride
-  kernel->setArg(30, stride_h_);
-  kernel->setArg(31, stride_w_);
+  kernel->setArg(31, stride_h_);
+  kernel->setArg(32, stride_w_);
   // dilate
-  kernel->setArg(32, upsample_h_);
-  kernel->setArg(33, upsample_w_);
-  kernel->setArg(34, (int32_t)0);
+  kernel->setArg(33, upsample_h_);
+  kernel->setArg(34, upsample_w_);
   kernel->setArg(35, (int32_t)0);
-  size_t idx = 36;
+  kernel->setArg(36, (int32_t)0);
+  size_t idx = 37;
   if(!is_a_deltas_cst)
     kernel->setArg(idx++, d_a_deltas_);
   if(!is_b_deltas_cst_)
@@ -361,10 +372,10 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
     kernel->setArg(6, K);
     kernel->setArg(9, EBH);
     kernel->setArg(10, EBW);
-    kernel->setArg(28, pad_h_);
-    kernel->setArg(29, pad_w_);
-    kernel->setArg(34, off_uh);
-    kernel->setArg(35, off_uw);
+    kernel->setArg(29, pad_h_);
+    kernel->setArg(30, pad_w_);
+    kernel->setArg(35, off_uh);
+    kernel->setArg(36, off_uw);
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
   }
 }

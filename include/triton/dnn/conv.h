@@ -75,9 +75,9 @@ public:
     std::vector<std::string> ax  = b_trans_ ? crs : rsc;
     std::vector<std::string> redax;
     if(b_trans_)
-      redax = {"C", "BH", "BW"};
+      redax = {"NC", "BH", "BW"};
     else
-      redax = {"BH", "BW", "N"};
+      redax = {"BH", "BW", "NC"};
     std::string inc_pb = b_lut_ ? "db" + bcb1 : "TK" + ldb0;
     std::string inc_pdb = b_trans_ ? "incd" : "TK";
     std::string a_delta_mem = is_a_deltas_cst ? "__constant__" : "";
@@ -106,6 +106,7 @@ public:
              int32 AH, int32 AW,
              int32 BH, int32 BW,
              int32 CH, int32 CW,
+             int32 NC,
              int32 lda_n, int32 lda_c, int32 lda_d, int32 lda_h, int32 lda_w,
              int32 ldb_c, int32 ldb_t, int32 ldb_r, int32 ldb_s, int32 ldb_k,
              int32 ldc_n, int32 ldc_k, int32 ldc_m, int32 ldc_p, int32 ldc_q,
