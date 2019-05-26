@@ -175,13 +175,16 @@ public:
     int32 checka0[TM] = *pm;
     int32 checka1[TK] = 1 << rka;
     int1 checka[TM, TK] = (checka0[:, newaxis] & checka1[newaxis, :]) > 0;
+    int1 checkb0[TN] = rb0 < N;
+    int1 checkb)" + BS + " = checkb0" + bcb0 + R"(;
     fp32 a[TM, TK] = checka ? *pa : 0;
-    fp32 b)" + BS + R"( = *pb;
+    fp32 b)" + BS + R"( = checkb ? *pb : 0;
     for(int32 k = K; k > 0; k = k - TK){
       C = dot(a, )" + useb + R"(, C);
       pa = pa + da[newaxis, :];
       pb = pb + )" + inc_pb + R"(;
-      b = *pb;
+      checkb = checkb && (k > TK);
+      @checkb b = *pb;
       pda = pda + incd;)";
   if(b_lut_){
     res += R"(
@@ -208,17 +211,17 @@ public:
     int32 rcq[TM] = rcpq % CW;
     rcp = rcp * upsample_h + off_uh;
     rcq = rcq * upsample_w + off_uw;
+    int1 checkc1[TN] = rc1 < N;
     int32 rc0[TM] = rcn * ldc_n + rcp * ldc_p + rcq * ldc_q;
     fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];)";
   if(bias_ && ty_==FPROP){
     res += R"(
     fp32* pbias[TN] = bias + rc1;
-    fp32 bias[TN] = *pbias;
+    fp32 bias[TN] = checkc1 ? *pbias : 0;
     C = C + bias[newaxis, :];)";
   }
     res += R"(
     int1 checkc0[TM] = rxc < M;
-    int1 checkc1[TN] = rc1 < N;
     int1 checkc[TM, TN]  = checkc0[:, newaxis] && checkc1[newaxis, :];
     @checkc *pc = C;
   })";

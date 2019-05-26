@@ -6,9 +6,9 @@ torch.set_printoptions(precision=4)
 
 x = torch.autograd.Variable(torch.randn(16, 16, 8, 8).cuda(), requires_grad=True)
 bias = torch.autograd.Variable(torch.randn(16).cuda(), requires_grad=True)
-w = torch.autograd.Variable(torch.randn(16, 3, 3, 16).cuda(), requires_grad=True)
+w = torch.autograd.Variable(torch.randn(16, 1, 1, 16).cuda(), requires_grad=True)
 cuw = torch.autograd.Variable(w.permute(3,0,1,2).cuda(), requires_grad=True)
-y_target = torch.autograd.Variable(torch.randn(16, 16, 3, 3).cuda(), requires_grad=True)
+y_target = torch.autograd.Variable(torch.randn(16, 16, 4, 4).cuda(), requires_grad=True)
 
 def run(x, w, conv):
   y = conv(x, w)
