@@ -41,7 +41,7 @@ torch::Tensor conv_common(
   triton::driver::context* ctx = stream->context();
   // Get configuration
   bool has_bias = torchbias.storage().size() > 0;
-  std::cout << B << " " << C << " " << D << " " << H << " " << W << " " << T << " " << R << " " << S << " " << NF << " " << stride_d << " " << stride_h << " " << stride_w << " " << pad_d << " " << pad_h << " " << pad_w << " " << ty << " " << has_bias << std::endl;
+//  std::cout << B << " " << C << " " << D << " " << H << " " << W << " " << T << " " << R << " " << S << " " << NF << " " << stride_d << " " << stride_h << " " << stride_w << " " << pad_d << " " << pad_h << " " << pad_w << " " << ty << " " << has_bias << std::endl;
   conv_key_t key = {B, C, D, H, W, T, R, S, NF, stride_d, stride_h, stride_w, pad_d, pad_h, pad_w, ty, has_bias};
   triton::dnn::conv* configuration;
   if(m_config.find(key) == m_config.end())

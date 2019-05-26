@@ -179,8 +179,8 @@ void conv::build_deltas(){
       int32_t EBD = 1;
       int32_t EBH = ((upsample_h_ - uh - 1) + BH_) / upsample_h_;
       int32_t EBW = ((upsample_w_ - uw - 1) + BW_) / upsample_w_;
-//      if(EBD == 0 || EBH == 0 || EBW == 0)
-//        continue;
+      if(EBD == 0 || EBH == 0 || EBW == 0)
+        continue;
       // unpack
       int32_t ctrs = i;
       int32_t c, t, r, s;
@@ -229,8 +229,8 @@ void conv::build_masks(){
          int32_t EBD = 1;
          int32_t EBH = ((upsample_h_ - uh - 1) + BH_) / upsample_h_;
          int32_t EBW = ((upsample_w_ - uw - 1) + BW_) / upsample_w_;
-//         if(EBD == 0 || EBH == 0 || EBW == 0)
-//           continue;
+         if(EBD == 0 || EBH == 0 || EBW == 0)
+           continue;
          std::tie(l, t, r, s) = unpack(i + j, !b_trans_, EBD, EBH, EBW);
          bool in_bounds_d = (t + pd) >= pad_d_ && (t + pd) < (EBD + pad_d_);
          bool in_bounds_h = (r + ph) >= pad_h_ && (r + ph) < (EBH + pad_h_);
@@ -336,13 +336,27 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
   grid[0] /= upsample_h_*upsample_w_;
   kernel->setArg(11, CH_/upsample_h_);
   kernel->setArg(12, CW_/upsample_w_);
+
+  // initialize to zero if necessary
+  bool init_zero = false;
   for(int32_t off_uh = 0; off_uh < upsample_h_; off_uh++)
   for(int32_t off_uw = 0; off_uw < upsample_w_; off_uw++) {
     int32_t EBD = 1;
     int32_t EBH = ((upsample_h_ - off_uh - 1) + BH_) / upsample_h_;
     int32_t EBW = ((upsample_w_ - off_uw - 1) + BW_) / upsample_w_;
-//    if(EBD == 0 || EBH == 0 || EBW == 0)
-//      continue;
+    if(EBD == 0 || EBH == 0 || EBW == 0)
+      init_zero = true;
+  }
+  if(init_zero)
+    ((driver::cu_buffer*)c)->set_zero(*((driver::cu_stream*)stream), c_size()*4);
+
+  for(int32_t off_uh = 0; off_uh < upsample_h_; off_uh++)
+  for(int32_t off_uw = 0; off_uw < upsample_w_; off_uw++) {
+    int32_t EBD = 1;
+    int32_t EBH = ((upsample_h_ - off_uh - 1) + BH_) / upsample_h_;
+    int32_t EBW = ((upsample_w_ - off_uw - 1) + BW_) / upsample_w_;
+    if(EBD == 0 || EBH == 0 || EBW == 0)
+      continue;
     int32_t K = shapes_b_[b_inner_idx_]*EBD*EBH*EBW;
     kernel->setArg(6, K);
     kernel->setArg(9, EBH);

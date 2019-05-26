@@ -125,7 +125,7 @@ public:
     int32 rka[TK] = 0 ... TK;
     int32 rkb[TK] = 0 ... TK;
     fp32 C[TM, TN] = 0;
-    int32 ldlut = )" + std::to_string(Fs_) + R"(;
+    int32 ldlut = )" + std::to_string(Luts_) + R"(;
     int32 rabh[TM] = rxa / CW;
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
