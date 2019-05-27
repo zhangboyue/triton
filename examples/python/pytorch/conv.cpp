@@ -80,12 +80,13 @@ torch::Tensor conv_common(
   // Add module to JIT
   triton::driver::kernel* kernel = jit->get_function("conv");
   triton::jit::launch_information info = jit->get_launch_info("conv");
+  unsigned GZ = jit->get_int("GZ");
   // launch info
   unsigned TM = info.global_range_size[0];
   unsigned TN = info.global_range_size[1];
   unsigned nthreads = info.num_threads;
   // enqueue
-  configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, nthreads);
+  configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, GZ, nthreads);
   return torchc;
 }
 

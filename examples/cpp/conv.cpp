@@ -10,16 +10,16 @@ int main() {
   // initialize default compute device
   auto context = triton::driver::backend::contexts::get_default();
   triton::jit jit(context);
-  triton::dnn::conv::type ty = triton::dnn::conv::BPROP;
+  triton::dnn::conv::type ty = triton::dnn::conv::FPROP;
   // initialization
-  int32_t B = 4, NF = 32;
-  int32_t D = 1, H = 56, W = 56;
+  int32_t B = 64, NF = 64;
+  int32_t D = 1, H = 8, W = 8;
   int32_t NC = 3, T = 1, R = 3, S = 3;
   int32_t pad_d = 0, pad_h = 0, pad_w = 0;
   int32_t stride_d = 1, stride_h = 1, stride_w = 1;
   int32_t upsample_d = 1, upsample_h = 1, upsample_w = 1;
-  triton::dnn::conv configuration(128, 3, 1, 32, 32, 1, 3, 3, 64, 1, 1, 1, 0, 1, 1, 1, 1, 1, triton::dnn::conv::FPROP);
-//  triton::dnn::conv configuration(B, NC, D, H, W, T, R, S, NF, stride_d, stride_h, stride_w, pad_d, pad_h, pad_w, upsample_d, upsample_h, upsample_w, ty);
+//  triton::dnn::conv configuration(128, 3, 1, 32, 32, 1, 3, 3, 64, 1, 1, 1, 0, 1, 1, 1, 1, 1, triton::dnn::conv::FPROP);
+  triton::dnn::conv configuration(B, NC, D, H, W, T, R, S, NF, stride_d, stride_h, stride_w, pad_d, pad_h, pad_w, upsample_d, upsample_h, upsample_w, ty);
   // convolution configuration
   std::vector<float> hc(configuration.c_size());
   std::vector<float> rc(configuration.c_size());
@@ -48,9 +48,10 @@ int main() {
     unsigned TM = info.global_range_size[0];
     unsigned TN = info.global_range_size[1];
     unsigned nthreads = info.num_threads;
-    configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, nthreads);
+    unsigned GZ = jit.get_int("GZ");
+    configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads);
     stream->synchronize();
-    double ts = bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, nthreads); },
+    double ts = bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads); },
                       [&](){ stream->synchronize(); }, *context->device());
     return configuration.get_nflops() / ts * 1e-3;
   };

@@ -51,7 +51,7 @@ public:
   void enqueue(driver::stream *stream, driver::kernel *kernel,
                driver::buffer *a, driver::buffer *b, driver::buffer *c,
                driver::buffer *bias,
-               size_t TM, size_t TN, size_t nthreads);
+               size_t TM, size_t TN, size_t GZ, size_t nthreads);
 
   // utilities
   size_t get_nflops();
@@ -89,6 +89,7 @@ public:
   const tunable int32 TM = {16, 32, 64};
   const tunable int32 TN = {16, 32, 64};
   const tunable int32 TK = {8};
+  const tunable int32 GZ = {1};
   )";
   if(is_a_deltas_cst)
     res += "__constant__ int32* delta = alloc_const int32[" + std::to_string(h_a_deltas_.size()) + "];\n";
@@ -113,7 +114,10 @@ public:
              int32 pad_h, int32 pad_w,
              int32 stride_h, int32 stride_w,
              int32 upsample_h, int32 upsample_w,
-             int32 off_uh, int32 off_uw)";
+             int32 off_uh, int32 off_uw,
+             int32 off_uah, int32 off_uaw,
+             int32 off_uch, int32 off_ucw,
+             int32 *locks, int32 grid0, int32 grid1)";
   if(!is_a_deltas_cst)
     res += ", int32* delta";
   if(b_lut_ && !is_b_deltas_cst_)
@@ -123,16 +127,23 @@ public:
    res += R"(){
     int32 rxa[TM] = get_global_range[TM](0);
     int32 rb0[TN] = get_global_range[TN](1);
+    int32 rz = get_global_range[1](2);
     int32 rka[TK] = 0 ... TK;
     int32 rkb[TK] = 0 ... TK;
     fp32 C[TM, TN] = 0;
     int32 ldlut = )" + std::to_string(Luts_) + R"(;
+    int32 div = K / GZ;
+    int32 rem = K % GZ;
+    K = select(rz < rem, div, div + rem);
+    int32 offk = rz*div;
+    rka = rka + offk;
+    rkb = rkb + offk;
     int32 rabh[TM] = rxa / CW;
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
-    raw = raw)" + upah + R"( - (pad_w + off_uw)/upsample_w + off_uw;
-    rah = rah)" + upaw + R"( - (pad_h + off_uh)/upsample_h + off_uh;
+    rah = rah)" + upaw + R"( - off_uah;
+    raw = raw)" + upah + R"( - off_uaw;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -152,8 +163,9 @@ public:
     int32 rb)" + ax[1] + "[TK] = rb" + ax[0] + ax[1] + " % " + redax[1] + R"(;
     rbr = rbr*upsample_h + off_uh;
     rbs = rbs*upsample_w + off_uw;
+    int32 offdb[TK] = rkb % ldlut;
     int32 rb1[TK] = rbc*ldb_c + rbr*ldb_r + rbs*ldb_s;
-    )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + rkb + off_uw*ldlut + off_uh*ldlut*upsample_w;
+    )" + b_delta_mem + R"( int32* pdb[TK] = b_delta + offdb + off_uw*ldlut + off_uh*ldlut*upsample_w;
     int32 db[TK] = *pdb;)";
   }
   else{
@@ -162,22 +174,25 @@ public:
   }
   res += R"(
     fp32* pb)" + BS + " = b + rb1" + bcb1 + " + rb0" + bcb0 + R"(*ldb_k;
-    )" + a_delta_mem + R"( int32* pincd[TK] = delta + rka;
-    )" + a_delta_mem + R"( int32* pda[TK]  = delta + ldlut + rka + off_uw*ldlut + off_uh*ldlut*upsample_w;
+    int32 offda[TK] = rka % ldlut;
+    )" + a_delta_mem + R"( int32* pincd[TK] = delta + offda;
+    )" + a_delta_mem + R"( int32* pda[TK]  = delta + ldlut + offda + off_uw*ldlut + off_uh*ldlut*upsample_w;
     int32 da[TK] = *pda;
     int32 incd[TK] = *pincd;
     int32 maskh[TM] = pad_h + min(rah, 0) + max(rah + BH - AH, 0);
     int32 maskw[TM] = pad_w + min(raw, 0) + max(raw + BW - AW, 0);
-    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + maskw*ldlut + maskh*ldlut*(2*pad_w + 1) + off_uw*ldlut*(2*pad_w+1)*(2*pad_h+1) + off_uh*ldlut*(2*pad_w+1)*(2*pad_h+1)*upsample_w;
-    )" + a_delta_mem + R"( int32* pincm[TM] = delta;
+    int32 offma = offk % ldlut;
+    )" + masks_mem + R"( int32* pm[TM] = masks + ldlut + offma + maskw*ldlut + maskh*ldlut*(2*pad_w + 1) + off_uw*ldlut*(2*pad_w+1)*(2*pad_h+1) + off_uh*ldlut*(2*pad_w+1)*(2*pad_h+1)*upsample_w;
+    )" + a_delta_mem + R"( int32* pincm[TM] = delta + offma;
     int32 incm[TM] = *pincm;
     int32 maska0[TM] = *pm;
-    int32 maska1[TK] = 1 << rka;
+    int32 maska1[TK] = 1 << (0 ... TK);
     int1 checka[TM, TK] = (maska0[:, newaxis] & maska1[newaxis, :]) > 0;
     int1 checkb0[TN] = rb0 < N;
     int1 checkb)" + BS + " = checkb0" + bcb0 + R"(;
     fp32 a[TM, TK] = checka ? *pa : 0;
     fp32 b)" + BS + R"( = checkb ? *pb : 0;
+    int32 rkamin[TK] = rka - offk + TK;
     for(int32 k = K; k > 0; k = k - TK){
       C = dot(a, )" + useb + R"(, C);
       pa = pa + da[newaxis, :];
@@ -196,18 +211,8 @@ public:
       incd = *pincd;
       pm = pm + incm;
       pincm = pincm + incm;
-      incm = *pincm;)";
-  if((ty_ == FPROP) && (NC_ % TK_ != 0)){
-    res += R"(
-      rka = rka + TK;
-      int32 rkac[TK] = rka / (BH*BW);
-      int1 checka1[TK] = rkac < NC;)";
-  }
-  else{
-    res += R"(
-      int1 checka1[TK] = k > TK;)";
-  }
-    res += R"(
+      incm = *pincm;
+      int1 checka1[TK] = (rkamin < k);
       maska0 = *pm;
       checka = (maska0[:, newaxis] & maska1[newaxis, :]) > 0;
       checka = checka && checka1[newaxis,:];
@@ -219,21 +224,36 @@ public:
     int32 rcpq[TM] = rxc % (CH*CW);
     int32 rcp[TM] = rcpq / CW;
     int32 rcq[TM] = rcpq % CW;
-    rcp = rcp * upsample_h + (off_uh + pad_h) % upsample_h;
-    rcq = rcq * upsample_w + (off_uw + pad_w) % upsample_w;
+    rcp = rcp * upsample_h + off_uch;
+    rcq = rcq * upsample_w + off_ucw;
     int1 checkc1[TN] = rc1 < N;
     int32 rc0[TM] = rcn * ldc_n + rcp * ldc_p + rcq * ldc_q;
-    fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];)";
-  if(bias_ && ty_==FPROP){
-    res += R"(
-    fp32* pbias[TN] = bias + rc1;
-    fp32 bias[TN] = checkc1 ? *pbias : 0;
-    C = C + bias[newaxis, :];)";
-  }
-    res += R"(
+    fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];
     int1 checkc0[TM] = rxc < M;
     int1 checkc[TM, TN]  = checkc0[:, newaxis] && checkc1[newaxis, :];
-    @checkc *pc = C;
+    int32 ridx = get_range_id(0);
+    int32 ridy = get_range_id(1);
+    int32 *plock = locks + ridx + ridy*grid0;
+    int32 *pcount = plock + grid0*grid1;
+    while(__atomic_cas(plock, 0, 1));
+    int32 count = *pcount;
+    int32 countp1 = select(count == GZ - 1, 0, count + 1);
+    if(count == 0) {)";
+   if(bias_ && ty_==FPROP){
+     res += R"(
+     fp32* pbias[TN] = bias + rc1;
+     fp32 bias[TN] = checkc1 ? *pbias : 0;
+     C = C + bias[newaxis, :];)";
+   }
+     res += R"(
+      @checkc *pc = C;
+      *pcount = countp1;
+    }
+    else {
+      @checkc *pc = C + *pc;
+      *pcount = countp1;
+    }
+    __atomic_cas(plock, 1, 0);
   })";
     return res;
   }
@@ -300,6 +320,7 @@ private:
   driver::buffer* d_a_deltas_;
   driver::buffer* d_b_deltas_;
   driver::buffer* d_masks_;
+  driver::buffer* d_locks_;
   bool is_a_deltas_cst;
   bool is_b_deltas_cst_;
   bool is_mask_cst_;
@@ -318,6 +339,9 @@ private:
   int32_t c_outer_0_idx_;
   int32_t c_outer_1_idx_;
   int32_t c_pix_idx;
+  // maximum grid size for loc
+  int32_t max_grid_0_;
+  int32_t max_grid_1_;
 };
 
 }

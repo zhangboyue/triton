@@ -101,6 +101,8 @@ conv::conv(int B, int NC,
   is_a_deltas_cst = cst_size < 65536;
   cst_size += h_masks_.size()*4;
   is_mask_cst_ = cst_size < 65536;
+  max_grid_0_ = 256;
+  max_grid_1_ = 256;
 }
 
 size_t conv::a_size()
@@ -279,6 +281,8 @@ void conv::init(driver::stream *stream, triton::driver::cu_module* module) {
   d_a_deltas_ = init_lut(is_a_deltas_cst, "delta", h_a_deltas_);
   d_b_deltas_ = init_lut(is_b_deltas_cst_, "b_delta", h_b_deltas_);
   d_masks_ = init_lut(is_mask_cst_, "masks", h_masks_);
+  d_locks_ = triton::driver::buffer::create(stream->context(), max_grid_0_*max_grid_1_*4);
+  ((triton::driver::cu_buffer*)d_locks_)->set_zero(stream, max_grid_0_*max_grid_1_*4);
 }
 
 void conv::set_arg(driver::kernel *kernel,
@@ -327,7 +331,14 @@ void conv::set_arg(driver::kernel *kernel,
   kernel->setArg(34, upsample_w_);
   kernel->setArg(35, (int32_t)0);
   kernel->setArg(36, (int32_t)0);
-  size_t idx = 37;
+  kernel->setArg(37, pad_h_);
+  kernel->setArg(38, pad_w_);
+  kernel->setArg(39, (int32_t)0);
+  kernel->setArg(40, (int32_t)0);
+  kernel->setArg(41, d_locks_);
+  kernel->setArg(42, 0);
+  kernel->setArg(43, 0);
+  size_t idx = 44;
   if(!is_a_deltas_cst)
     kernel->setArg(idx++, d_a_deltas_);
   if(!is_b_deltas_cst_)
@@ -338,15 +349,17 @@ void conv::set_arg(driver::kernel *kernel,
 
 void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
                    driver::buffer *a, driver::buffer *b, driver::buffer *c, driver::buffer *bias,
-                   size_t TM, size_t TN, size_t nthreads) {
+                   size_t TM, size_t TN, size_t GZ, size_t nthreads) {
   set_arg(kernel, a, b, c, bias);
   std::array<size_t, 3> grid = {1};
   grid[0] = (M_ + TM - 1)/TM;
   grid[1] = (N_ + TN - 1)/TN;
-  grid[2] = 1;
+  grid[2] = GZ;
   grid[0] /= upsample_h_*upsample_w_;
   kernel->setArg(11, CH_/upsample_h_);
   kernel->setArg(12, CW_/upsample_w_);
+  kernel->setArg(42, (int32_t)grid[0]);
+  kernel->setArg(43, (int32_t)grid[1]);
 
   // initialize to zero if necessary
   bool init_zero = false;
@@ -359,7 +372,7 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
       init_zero = true;
   }
   if(init_zero)
-    ((driver::cu_buffer*)c)->set_zero(*((driver::cu_stream*)stream), c_size()*4);
+    ((driver::cu_buffer*)c)->set_zero(stream, c_size()*4);
 
   for(int32_t off_uh = 0; off_uh < upsample_h_; off_uh++)
   for(int32_t off_uw = 0; off_uw < upsample_w_; off_uw++) {
@@ -376,6 +389,10 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
     kernel->setArg(30, pad_w_);
     kernel->setArg(35, off_uh);
     kernel->setArg(36, off_uw);
+    kernel->setArg(37, (pad_h_ + (1 - upsample_h_)*off_uh)/upsample_h_);
+    kernel->setArg(38, (pad_w_ + (1 - upsample_w_)*off_uw)/upsample_w_);
+    kernel->setArg(39, (off_uh + pad_h_) % upsample_h_);
+    kernel->setArg(40, (off_uw + pad_w_) % upsample_w_);
     stream->enqueue(kernel, grid, {nthreads, 1, 1});
   }
 }
@@ -383,14 +400,14 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
 std::vector<unsigned> conv::default_params() {
   if(b_lut_){
     if(!b_trans_)
-      return {16, 2, 32, 16, 16, 8, 8, 2, 2, 4, 2, 8, 4, 2};
+      return {16, 2, 32, 16, 16, 8, 8, 2, 2, 4, 2, 8, 4, 2, 2};
     else
-      return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8};
+      return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8, 2};
   }
   else if(ty_ == FPROP)
-    return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4};
+    return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4, 2};
   else
-    return {32, 2, 64, 32, 64, 32, 4, 2, 2, 4, 2, 8, 4, 2};
+    return {16, 2, 64, 16, 16, 16, 4, 2, 2, 4, 2, 8, 4, 2, 2};
 }
 
 
