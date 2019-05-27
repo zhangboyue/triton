@@ -131,10 +131,8 @@ public:
     int32 raw[TM] = rxa % CW;
     int32 rab[TM] = rabh / CH;
     int32 rah[TM] = rabh % CH;
-    raw = (off_uw + raw)*upsample_w;
-    rah = (off_uh + rah)*upsample_h;
-    raw = (raw)" + upah + R"( - pad_w)/upsample_w;
-    rah = (rah)" + upaw + R"( - pad_h)/upsample_h;
+    raw = raw)" + upah + R"( - (pad_w + off_uw)/upsample_w + off_uw;
+    rah = rah)" + upaw + R"( - (pad_h + off_uh)/upsample_h + off_uh;
     int32 ra0[TM] = rab*lda_n + rah*lda_h + raw*lda_w;
     int32 ra)" + ax[0] + ax[1] + "[TK] = rka / " + redax[2] + R"(;
     int32 ra)" + ax[2] + "[TK] = rka %  " + redax[2] + R"(;
@@ -221,8 +219,8 @@ public:
     int32 rcpq[TM] = rxc % (CH*CW);
     int32 rcp[TM] = rcpq / CW;
     int32 rcq[TM] = rcpq % CW;
-    rcp = rcp * upsample_h + off_uh;
-    rcq = rcq * upsample_w + off_uw;
+    rcp = rcp * upsample_h + (off_uh + pad_h) % upsample_h;
+    rcq = rcq * upsample_w + (off_uw + pad_w) % upsample_w;
     int1 checkc1[TN] = rc1 < N;
     int32 rc0[TM] = rcn * ldc_n + rcp * ldc_p + rcq * ldc_q;
     fp32* pc[TM, TN]  = c + rc1[newaxis, :]*ldc_k + rc0[:, newaxis];)";
