@@ -1,7 +1,8 @@
+#include <vector>
+#include <sstream>
 #include <torch/torch.h>
 #include <torch/script.h>
 #include "ATen/cuda/CUDAContext.h"
-#include <vector>
 #include "triton/runtime/jit.h"
 #include "triton/driver/stream.h"
 #include "triton/dnn/conv.h"
@@ -78,7 +79,9 @@ torch::Tensor conv_common(
   triton::jit* jit;
   if(m_jit.find(key) == m_jit.end()){
     jit = m_jit.emplace(key, new triton::jit(ctx)).first->second.get();
-    std::string src = configuration->src();
+    std::ostringstream oss;
+    configuration->src(oss);
+    std::string src = oss.str();
     // benchmark a given convolution kernel
     auto benchmark = [&](triton::driver::kernel* kernel,
                          triton::jit::launch_information info) {

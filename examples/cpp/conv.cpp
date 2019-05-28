@@ -1,5 +1,6 @@
 #include <cstring>
 #include <cstdio>
+#include <sstream>
 #include "triton/runtime/jit.h"
 #include "triton/driver/backend.h"
 #include "triton/driver/stream.h"
@@ -55,7 +56,9 @@ int main() {
                       [&](){ stream->synchronize(); }, context->device());
     return configuration.get_nflops() / ts * 1e-3;
   };
-  std::string src = configuration.src();
+  std::ostringstream oss;
+  configuration.src(oss);
+  std::string src = oss.str();
   triton::jit::tune_res_t best = jit.autotune("conv", src.c_str(), benchmark);
   jit.add_module("conv", src.c_str(), best.params);
 //  jit.add_module("conv", src.c_str(), configuration.default_params());
