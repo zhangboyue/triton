@@ -56,8 +56,9 @@ int main() {
     return configuration.get_nflops() / ts * 1e-3;
   };
   std::string src = configuration.src();
-//  jit.autotune("conv", src.c_str(), benchmark);
-  jit.add_module("conv", src.c_str(), configuration.default_params());
+  triton::jit::tune_res_t best = jit.autotune("conv", src.c_str(), benchmark);
+  jit.add_module("conv", src.c_str(), best.params);
+//  jit.add_module("conv", src.c_str(), configuration.default_params());
   triton::driver::kernel* kernel = jit.get_function("conv");
   triton::jit::launch_information info = jit.get_launch_info("conv");
   std::cout << "Performance: " << benchmark(kernel, info) << " TFLOPS " << std::endl;
