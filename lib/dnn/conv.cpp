@@ -400,14 +400,14 @@ void conv::enqueue(driver::stream *stream, driver::kernel *kernel,
 std::vector<unsigned> conv::default_params() {
   if(b_lut_){
     if(!b_trans_)
-      return {16, 2, 32, 16, 16, 8, 8, 2, 2, 4, 2, 8, 4, 2, 2};
+      return {16, 2, 32, 16, 16, 8, 8, 2, 2, 4, 2, 8, 4, 2, 1};
     else
-      return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8, 2};
+      return {32, 2, 64, 32, 2, 64, 16, 8, 2, 2, 4, 2, 8, 1};
   }
   else if(ty_ == FPROP)
-    return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4, 2};
+    return {16, 2, 64, 32, 2, 64, 16, 8, 2, 2, 8, 1, 8, 4, 1};
   else
-    return {16, 2, 64, 16, 16, 16, 4, 2, 2, 4, 2, 8, 4, 2, 2};
+    return {16, 2, 64, 16, 16, 16, 4, 2, 2, 4, 2, 8, 4, 2, 1};
 }
 
 

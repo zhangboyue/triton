@@ -145,8 +145,8 @@ jit::tune_res_t jit::autotune(const char *name, const char *src, benchmark_t ben
     std::unique_ptr<driver::module> module(driver::module::create(driver_context_, &*ll_module));
     std::unique_ptr<driver::kernel> kernel(driver::kernel::create(module.get(), name));
     launch_information info = launch_info_map_.at(name);
-//    for(unsigned p: params)
-//      std::cout << p << " " << std::flush;
+    for(unsigned p: params)
+      std::cout << p << " " << std::flush;
     // add globals
     for(auto x: tt_module.globals())
       global_ints_[x.first] = ((ir::metaparameter*)x.second)->get_value();
@@ -157,7 +157,7 @@ jit::tune_res_t jit::autotune(const char *name, const char *src, benchmark_t ben
       best.perf = perf;
       best.params = params;
     }
-//    std::cout << perf << " [ " << best.perf << " ] " << std::endl;
+    std::cout << perf << " [ " << best.perf << " ] " << std::endl;
     modules_.erase(name);
   });
   return best;

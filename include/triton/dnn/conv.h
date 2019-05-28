@@ -89,7 +89,7 @@ public:
   const tunable int32 TM = {16, 32, 64};
   const tunable int32 TN = {16, 32, 64};
   const tunable int32 TK = {8};
-  const tunable int32 GZ = {1, 2, 4, 8};
+  const tunable int32 GZ = {1, 2, 4, 8, 16};
   )";
   if(is_a_deltas_cst)
     res += "__constant__ int32* delta = alloc_const int32[" + std::to_string(h_a_deltas_.size()) + "];\n";

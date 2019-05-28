@@ -94,9 +94,13 @@ torch::Tensor conv_common(
     };
     // auto-tune and save result
     std::cout << "Tuning ";
-    print(key);
-    triton::jit::tune_res_t best = jit->autotune("conv", src.c_str(), benchmark);
-    jit->add_module("conv", src.c_str(), best.params);
+    if(C == 3)
+      jit->add_module("conv", src.c_str(), configuration->default_params());
+    else{
+      print(key);
+      triton::jit::tune_res_t best = jit->autotune("conv", src.c_str(), benchmark);
+      jit->add_module("conv", src.c_str(), best.params);
+    }
     triton::driver::kernel* kernel = jit->get_function("conv");
     configuration->init(stream, (triton::driver::cu_module*)kernel->module());
   }
