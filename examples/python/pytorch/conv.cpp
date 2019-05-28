@@ -5,7 +5,7 @@
 #include "triton/runtime/jit.h"
 #include "triton/driver/stream.h"
 #include "triton/dnn/conv.h"
-#include "common.hpp"
+#include "triton/tools/bench.hpp"
 
 #define CHECK_CUDA(x) AT_CHECK(x.type().is_cuda(), #x " must be a CUDA tensor")
 #define CHECK_CONTIGUOUS(x) AT_CHECK(x.is_contiguous(), #x " must be contiguous")
@@ -27,7 +27,8 @@ torch::Tensor conv_common(
     int32_t stride_d, int32_t stride_h, int32_t stride_w,
     int32_t pad_d, int32_t pad_h, int32_t pad_w,
     triton::dnn::conv::type ty,
-    torch::Tensor torcha, torch::Tensor torchb, torch::Tensor torchbias
+    torch::Tensor torcha, torch::Tensor torchb, torch::Tensor torchbias,
+    bool autotune = false
     ) {
 
   // Wrap CUDA handles
@@ -88,18 +89,17 @@ torch::Tensor conv_common(
       unsigned GZ = jit->get_int("GZ");
       configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, GZ, nthreads);
       stream->synchronize();
-      double ts = bench([&](){ configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, GZ, nthreads); },
-                        [&](){ stream->synchronize(); }, *stream->context()->device());
+      double ts = triton::tools::bench([&](){ configuration->enqueue(stream, kernel, &a, &b, &c, bias, TM, TN, GZ, nthreads); },
+                        [&](){ stream->synchronize(); }, stream->context()->device());
       return configuration->get_nflops() / ts * 1e-3;
     };
     // auto-tune and save result
-    std::cout << "Tuning ";
-    if(C == 3)
-      jit->add_module("conv", src.c_str(), configuration->default_params());
-    else{
-      print(key);
+    if(autotune) {
       triton::jit::tune_res_t best = jit->autotune("conv", src.c_str(), benchmark);
       jit->add_module("conv", src.c_str(), best.params);
+    }
+    else {
+      jit->add_module("conv", src.c_str(), configuration->default_params());
     }
     triton::driver::kernel* kernel = jit->get_function("conv");
     configuration->init(stream, (triton::driver::cu_module*)kernel->module());

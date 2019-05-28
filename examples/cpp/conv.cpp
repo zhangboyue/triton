@@ -1,10 +1,10 @@
 #include <cstring>
 #include <cstdio>
-#include "common.hpp"
 #include "triton/runtime/jit.h"
 #include "triton/driver/backend.h"
 #include "triton/driver/stream.h"
 #include "triton/dnn/conv.h"
+#include "triton/tools/bench.hpp"
 
 int main() {
   // initialize default compute device
@@ -51,8 +51,8 @@ int main() {
     unsigned GZ = jit.get_int("GZ");
     configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads);
     stream->synchronize();
-    double ts = bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads); },
-                      [&](){ stream->synchronize(); }, *context->device());
+    double ts = triton::tools::bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads); },
+                      [&](){ stream->synchronize(); }, context->device());
     return configuration.get_nflops() / ts * 1e-3;
   };
   std::string src = configuration.src();
