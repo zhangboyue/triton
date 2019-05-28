@@ -635,8 +635,6 @@ os << R"(
     C = dot(a, )" + useb + R"(, C);
     pa = pa + da[newaxis, :];
     pb = pb + )" + inc_pb + R"(;
-    checkb = checkb && (k > TK);
-    @checkb b = *pb;
     pda = pda + incd;)";
 if(b_lut_){
   os << R"(
@@ -655,6 +653,8 @@ if(b_lut_){
     checka = (maska0[:, newaxis] & maska1[newaxis, :]) > 0;
     checka = checka && checka1[newaxis,:];
     a = checka ? *pa : 0;
+    checkb = checkb && (k > TK);
+    @checkb b = *pb;
   }
   int32 rxc[TM] = get_global_range[TM](0);
   int32 rc1[TN] = get_global_range[TN](1);

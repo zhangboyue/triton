@@ -53,7 +53,7 @@ int main() {
     configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads);
     stream->synchronize();
     double ts = triton::tools::bench([&](){ configuration.enqueue(stream, kernel, da, db, dc, nullptr, TM, TN, GZ, nthreads); },
-                      [&](){ stream->synchronize(); }, context->device());
+                      [&](){ stream->synchronize(); }, nullptr);
     return configuration.get_nflops() / ts * 1e-3;
   };
   std::ostringstream oss;
