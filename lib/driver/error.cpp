@@ -27,7 +27,8 @@ namespace triton
 namespace driver
 {
 
-void check(CUresult err)
+template<>
+void check<CUresult>(CUresult err)
 {
   using namespace exception::cuda;
   switch(err)
@@ -94,7 +95,8 @@ void check(CUresult err)
   }
 }
 
-void check(cl_int err)
+template<>
+void check<cl_int>(cl_int err)
 {
     using namespace exception::ocl;
     switch(err)

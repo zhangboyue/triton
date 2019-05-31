@@ -48,9 +48,7 @@ namespace driver
 
 class cu_context;
 
-template<class T> void check(T){}
-void check(CUresult err);
-void check(cl_int err);
+template<class T> void check(T){ }
 
 class dispatch
 {

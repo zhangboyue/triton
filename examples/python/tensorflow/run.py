@@ -1,20 +1,25 @@
 import os
 import tensorflow as tf
 import numpy as np
+from blocksparse import BlocksparseMatMul
 
-data_files_path = tf.resource_loader.get_data_files_path()
-library_dir = '/home/philippe/Development/triton/build/examples/python/tensorflow'
-module = tf.load_op_library(os.path.join(library_dir, 'libtf_blocksparse.so'))
+#data_files_path = tf.resource_loader.get_data_files_path()
+#library_dir = '/home/philippe/development/triton/build/examples/python/tensorflow'
+#module = tf.load_op_library(os.path.join(library_dir, 'libtf_blocksparse.so'))
 
-M, N, K = 512, 512, 512
-a = tf.placeholder(tf.float32, shape=[M, K])
-b = tf.placeholder(tf.float32, shape=[N, K])
-locks = tf.placeholder(tf.int32, shape=[4096])
-c = module.block_sparse_mat_mul(a, b, locks)
+hidden_size = 4096
+block_size = 32
+minibatch_size = 64
+
+# Initialize
+sparsity = np.random.randint(2, size=(hidden_size//block_size,hidden_size//block_size))
+bsmm = BlocksparseMatMul(sparsity, block_size=block_size)
+x = tf.placeholder(tf.float32, shape=[None, hidden_size])
+w = tf.get_variable("w", bsmm.w_shape, dtype=tf.float32)
+y = bsmm(x, w)
+
 # Run
 sess = tf.InteractiveSession()
 sess.run(tf.global_variables_initializer())
-result = sess.run([c], feed_dict = {locks: np.zeros(4096),
-									a: np.random.rand(M, K),
-									b: np.random.rand(N, K)})
+result = sess.run([y], feed_dict = {x: np.ones((minibatch_size,hidden_size), dtype='float32')})
 print(result)

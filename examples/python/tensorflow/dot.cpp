@@ -3,7 +3,7 @@
 #include "triton/driver/buffer.h"
 #include "triton/driver/backend.h"
 #include "triton/driver/stream.h"
-#include "triton/jit.h"
+#include "triton/runtime/jit.h"
 
 #define EIGEN_USE_GPU
 #include "tensorflow/core/framework/op.h"
@@ -130,7 +130,6 @@ class BlockSparseGemmOp : public OpKernel {
     triton::driver::cu_buffer db(ctx, (CUdeviceptr)b.flat<float>().data(), false);
     triton::driver::cu_buffer dc(ctx, (CUdeviceptr)c->flat<float>().data(), false);
     triton::driver::cu_buffer dlocks(ctx, (CUdeviceptr)locks.flat<int32_t>().data(), false);
-    stream->synchronize();
     // just-in-time compile source-code
     jit.add_module("matmul", src, {16, 2, 64, 16, 2, 64, 16, 8, 2, 2, 8, 8, 8, 1});
     triton::driver::kernel* kernel = jit.get_function("matmul");
