@@ -42,11 +42,12 @@ namespace driver
 class cu_buffer;
 
 // Base
-class kernel: public polymorphic_resource<CUfunction, cl_kernel, host_function_t> {
+class kernel: public polymorphic_resource<CUfunction, cl_kernel, host_function_t, vk_function_t> {
 public:
   kernel(driver::module* program, CUfunction fn, bool has_ownership);
   kernel(driver::module* program, cl_kernel fn, bool has_ownership);
   kernel(driver::module* program, host_function_t fn, bool has_ownership);
+  kernel(driver::module *program, vk_function_t fn, bool has_ownership);
   // Getters
   driver::module* module();
   // Factory methods
@@ -99,6 +100,14 @@ public:
 private:
   std::vector<std::shared_ptr<void> >  cu_params_store_;
   std::vector<void*>  cu_params_;
+};
+
+class vk_kernel: public kernel {
+  //Constructors
+  vk_kernel(driver::module* program, const char* name);
+  // Arguments setters
+  void setArg(unsigned int index, std::size_t size, void* ptr);
+  void setArg(unsigned int index, driver::buffer* buffer);
 };
 
 }

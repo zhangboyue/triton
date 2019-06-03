@@ -26,11 +26,11 @@
 #include <type_traits>
 #include <dlfcn.h>
 
-//CUDA Backend
 #include "triton/external/CUDA/cuda.h"
 #include "triton/external/CUDA/nvml.h"
 #include "triton/external/CL/cl.h"
 #include "triton/external/CL/cl_ext.h"
+#include "triton/external/vulkan/vulkan.h"
 
 //Exceptions
 #include <iostream>
@@ -51,6 +51,7 @@ class cu_context;
 template<class T> void check(T){}
 void check(CUresult err);
 void check(cl_int err);
+void check(VkResult err);
 
 class dispatch
 {
@@ -85,6 +86,7 @@ public:
   static bool nvmlinit();
   static bool cuinit();
   static bool spvllvminit();
+  static bool vkinit();
   static void release();
 
   // OpenCL
@@ -122,6 +124,46 @@ public:
   static cl_mem clCreateBuffer(cl_context, cl_mem_flags, size_t, void *, cl_int *);
   static cl_program clCreateProgramWithSource(cl_context, cl_uint, const char **, const size_t *, cl_int *);
   static cl_int clReleaseKernel(cl_kernel);
+
+  // Vulkan
+  static VkResult vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkInstance *pInstance);
+  static VkResult vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount, VkPhysicalDevice *pPhysicalDevices);
+  static VkResult vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);
+  static VkResult vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue *pQueue);
+  static VkResult vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer);
+  static VkResult vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer, VkMemoryRequirements *pMemoryRequirements);
+  static VkResult vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo, const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory);
+  static VkResult vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
+  static VkResult vkCreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
+  static VkResult vkCreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDescriptorPool *pDescriptorPool);
+  static VkResult vkAllocateDescriptorSets(VkDevice device, const VkDescriptorSetAllocateInfo *pAllocateInfo, VkDescriptorSet *pDescriptorSets);
+  static VkResult vkUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet *pDescriptorCopies);
+  static VkResult vkCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkShaderModule *pShaderModule);
+  static VkResult vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo *pCreateInfos, const VkAllocationCallbacks *pAllocator, VkPipeline *pPipelines);
+  static VkResult vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkCommandPool *pCommandPool);
+  static VkResult vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo *pAllocateInfo, VkCommandBuffer *pCommandBuffers);
+  static VkResult vkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *pBeginInfo);
+  static VkResult vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
+  static VkResult vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets);
+  static VkResult vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+  static VkResult vkEndCommandBuffer(VkCommandBuffer commandBuffer);
+  static VkResult vkCreateFence(VkDevice device, const VkFenceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkFence *pFence);
+  static VkResult vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits, VkFence fence);
+  static VkResult vkWaitForFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences, VkBool32 waitAll, uint64_t timeout);
+  static VkResult vkDestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
+  static VkResult vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties);
+  static VkResult vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties *pProperties);
+  static VkResult vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout);
 
   // CUDA
   static CUresult cuCtxGetCurrent(CUcontext *pctx);
@@ -180,6 +222,45 @@ private:
   static void* spvcross_;
   static void* opengl_;
 
+  // Vulkan functions
+  static void* vkCreateInstance_;
+  static void* vkEnumeratePhysicalDevices_;
+  static void* vkCreateDevice_;
+  static void* vkGetDeviceQueue_;
+  static void* vkCreateBuffer_;
+  static void* vkGetBufferMemoryRequirements_;
+  static void* vkAllocateMemory_;
+  static void* vkBindBufferMemory_;
+  static void* vkCreateDescriptorSetLayout_;
+  static void* vkCreateDescriptorPool_;
+  static void* vkAllocateDescriptorSets_;
+  static void* vkUpdateDescriptorSets_;
+  static void* vkCreateShaderModule_;
+  static void* vkCreateComputePipelines_;
+  static void* vkCreateCommandPool_;
+  static void* vkAllocateCommandBuffers_;
+  static void* vkBeginCommandBuffer_;
+  static void* vkCmdBindPipeline_;
+  static void* vkCmdBindDescriptorSets_;
+  static void* vkCmdDispatch_;
+  static void* vkEndCommandBuffer_;
+  static void* vkCreateFence_;
+  static void* vkQueueSubmit_;
+  static void* vkWaitForFences_;
+  static void* vkDestroyFence_;
+  static void* vkFreeMemory_;
+  static void* vkDestroyBuffer_;
+  static void* vkDestroyShaderModule_;
+  static void* vkDestroyDescriptorPool_;
+  static void* vkDestroyDescriptorSetLayout_;
+  static void* vkDestroyPipelineLayout_;
+  static void* vkDestroyPipeline_;
+  static void* vkDestroyCommandPool_;
+  static void* vkDestroyDevice_;
+  static void* vkDestroyInstance_;
+  static void* vkGetPhysicalDeviceQueueFamilyProperties_;
+  static void* vkGetPhysicalDeviceProperties_;
+  static void* vkCreatePipelineLayout_;
   // OpenCL functions
   static void* clBuildProgram_;
   static void* clEnqueueNDRangeKernel_;

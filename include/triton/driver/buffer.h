@@ -34,11 +34,13 @@ namespace driver
 class stream;
 
 // Base
-class buffer : public polymorphic_resource<CUdeviceptr, cl_mem, host_buffer_t> {
+class buffer : public polymorphic_resource<CUdeviceptr, cl_mem, host_buffer_t, vk_buffer_t> {
 public:
   buffer(driver::context* ctx, CUdeviceptr cl, bool take_ownership);
   buffer(driver::context* ctx, cl_mem cl, bool take_ownership);
   buffer(driver::context* ctx, host_buffer_t hst, bool take_ownership);
+  buffer(driver::context *ctx, vk_buffer_t vk, bool take_ownership);
+
   static buffer* create(driver::context* ctx, size_t size);
   driver::context* context();
 
@@ -67,6 +69,13 @@ public:
   cu_buffer(driver::context* context, size_t size);
   cu_buffer(driver::context* context, CUdeviceptr cu, bool take_ownership);
   void set_zero(triton::driver::stream *queue, size_t size);
+};
+
+// Vulkan
+class vk_buffer: public buffer
+{
+public:
+  vk_buffer(driver::context* context, size_t size);
 };
 
 }

@@ -45,7 +45,37 @@ namespace driver
 enum backend_t {
   CUDA,
   OpenCL,
-  Host
+  Host,
+  Vulkan
+};
+
+// Vulkan handles
+typedef VkInstance vk_platform_t;
+
+struct vk_device_t {
+  VkPhysicalDevice p_device;
+  VkDevice device;
+};
+
+struct vk_context_t {
+
+};
+
+struct vk_stream_t {
+  VkQueue queue;
+};
+
+typedef VkShaderModule vk_module_t;
+
+struct vk_function_t {
+  VkPipeline pipeline;
+  VkPipelineLayout pipeline_layout;
+  VkDescriptorSetLayout descriptor_layout;
+};
+
+struct vk_buffer_t {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
 };
 
 // Host handles
@@ -123,26 +153,30 @@ protected:
   bool has_ownership_;
 };
 
-template<class CUType, class CLType, class HostType>
+template<class CUType, class CLType, class HostType, class VKType>
 class polymorphic_resource {
 public:
   polymorphic_resource(CUType cu, bool take_ownership): cu_(cu, take_ownership), backend_(CUDA){}
   polymorphic_resource(CLType cl, bool take_ownership): cl_(cl, take_ownership), backend_(OpenCL){}
   polymorphic_resource(HostType hst, bool take_ownership): hst_(hst, take_ownership), backend_(Host){}
+  polymorphic_resource(VKType vk, bool take_ownership): vk_(vk, take_ownership), backend_(Vulkan){}
   virtual ~polymorphic_resource() { }
 
   handle<CUType> cu() { return cu_; }
   handle<CLType> cl() { return cl_; }
   handle<HostType> hst() { return hst_; }
+  handle<VKType> vk() { return vk_; }
   const handle<CUType>& cu() const { return cu_; }
   const handle<CLType>& cl() const { return cl_; }
   const handle<HostType>& hst() const { return hst_; }
+  const handle<VKType>& vk() const { return vk_; }
   backend_t backend() { return backend_; }
 
 protected:
   handle<CLType> cl_;
   handle<CUType> cu_;
   handle<HostType> hst_;
+  handle<VKType> vk_;
   backend_t backend_;
 };
 

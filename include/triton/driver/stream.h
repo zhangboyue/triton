@@ -41,7 +41,7 @@ class Range;
 class cu_buffer;
 
 // Base
-class stream: public polymorphic_resource<CUstream, cl_command_queue, host_stream_t> {
+class stream: public polymorphic_resource<CUstream, cl_command_queue, host_stream_t, vk_stream_t> {
 public:
   stream(driver::context *ctx, CUstream, bool has_ownership);
   stream(driver::context *ctx, cl_command_queue, bool has_ownership);

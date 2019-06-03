@@ -31,7 +31,7 @@ namespace triton
 namespace driver
 {
 
-class context: public polymorphic_resource<CUcontext, cl_context, host_context_t>{
+class context: public polymorphic_resource<CUcontext, cl_context, host_context_t, vk_context_t>{
 protected:
   static std::string get_cache_path();
 
@@ -81,6 +81,11 @@ public:
   ocl_context(driver::device* dev);
 };
 
+// Vulkan
+class vk_context: public context {
+public:
+  vk_context(driver::device* dev);
+};
 
 
 

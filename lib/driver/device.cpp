@@ -63,6 +63,37 @@ std::unique_ptr<codegen::target> ocl_device::make_target() const {
 }
 
 /* ------------------------ */
+//         Vulkan           //
+/* ------------------------ */
+
+vk_device::vk_device(vk_device_t vk, bool take_ownership): device(vk, take_ownership) {
+  dispatch::vkGetPhysicalDeviceProperties(vk.p_device, &properties_);
+}
+
+size_t vk_device::max_threads_per_block() const {
+  return properties_.limits.maxComputeWorkGroupSize[0];
+}
+
+size_t vk_device::max_shared_memory() const {
+  return properties_.limits.maxComputeSharedMemorySize;
+}
+
+std::unique_ptr<codegen::target> vk_device::make_target() const {
+  return std::unique_ptr<codegen::amd_cl_target>(new codegen::amd_cl_target());
+}
+
+uint32_t vk_device::find_memory_type(uint32_t memory_type_bits, VkMemoryPropertyFlags properties) {
+  VkPhysicalDeviceMemoryProperties memory_properties;
+  vkGetPhysicalDeviceMemoryProperties(vk_->p_device, &memory_properties);
+  for (uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
+    if((memory_type_bits & (1 << i)) &&
+      ((memory_properties.memoryTypes[i].propertyFlags & properties) == properties))
+      return i;
+  }
+  return -1;
+}
+
+/* ------------------------ */
 //         CUDA             //
 /* ------------------------ */
 

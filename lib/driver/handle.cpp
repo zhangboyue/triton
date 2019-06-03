@@ -59,6 +59,15 @@ inline void _delete(CUmodule x) { dispatch::cuModuleUnload(x); }
 inline void _delete(cu_event_t x) { _delete(x.first); _delete(x.second); }
 inline void _delete(CUPlatform){}
 
+// Vulkan
+inline void _delete(vk_platform_t x) { }
+inline void _delete(vk_device_t   x) { }
+inline void _delete(vk_context_t  x) { }
+inline void _delete(vk_module_t   x) { }
+inline void _delete(vk_stream_t   x) { }
+inline void _delete(vk_buffer_t   x) { }
+inline void _delete(vk_function_t x) { }
+
 //Constructor
 template<class T>
 handle<T>::handle(T cu, bool take_ownership): h_(new T(cu)), has_ownership_(take_ownership)
@@ -99,6 +108,13 @@ template class handle<host_stream_t>;
 template class handle<host_buffer_t>;
 template class handle<host_function_t>;
 
+template class handle<vk_platform_t>;
+template class handle<vk_device_t>;
+template class handle<vk_context_t>;
+template class handle<vk_module_t>;
+template class handle<vk_stream_t>;
+template class handle<vk_buffer_t>;
+template class handle<vk_function_t>;
 
 }
 }

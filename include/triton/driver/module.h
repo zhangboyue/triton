@@ -45,7 +45,7 @@ class cu_context;
 class cu_device;
 
 // Base
-class module: public polymorphic_resource<CUmodule, cl_program, host_module_t> {
+class module: public polymorphic_resource<CUmodule, cl_program, host_module_t, vk_module_t> {
 protected:
   void init_llvm();
 
@@ -58,6 +58,8 @@ public:
   module(driver::context* ctx, CUmodule mod, bool has_ownership);
   module(driver::context* ctx, cl_program mod, bool has_ownership);
   module(driver::context* ctx, host_module_t mod, bool has_ownership);
+  module(driver::context* ctx, vk_module_t mod, bool has_ownership);
+
   static module* create(driver::context* ctx, llvm::Module *src);
   driver::context* context() const;
   void compile_llvm_module(llvm::Module* module, const std::string& triple,
@@ -78,7 +80,6 @@ public:
 
 // OpenCL
 class ocl_module: public module{
-
 public:
   ocl_module(driver::context* context, llvm::Module *module);
 };
@@ -96,6 +97,11 @@ private:
   std::string source_;
 };
 
+// Vulkan
+class vk_module: public module {
+public:
+  vk_module(driver::context *context, llvm::Module *module);
+};
 
 }
 

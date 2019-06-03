@@ -40,7 +40,7 @@ namespace driver
 class context;
 
 // Base device
-class device: public polymorphic_resource<CUdevice, cl_device_id, host_device_t>{
+class device: public polymorphic_resource<CUdevice, cl_device_id, host_device_t, vk_device_t>{
 public:
   using polymorphic_resource::polymorphic_resource;
   virtual size_t max_threads_per_block() const = 0;
@@ -122,6 +122,19 @@ public:
 private:
   std::shared_ptr<std::pair<size_t, size_t>> interpreted_as_;
 };
+
+class vk_device: public device {
+public:
+  vk_device(vk_device_t vk, bool take_ownership = true);
+  size_t max_threads_per_block() const;
+  size_t max_shared_memory() const;
+  std::unique_ptr<codegen::target> make_target() const;
+  uint32_t find_memory_type(uint32_t memory_type_bits, VkMemoryPropertyFlags properties);
+
+private:
+  VkPhysicalDeviceProperties properties_;
+};
+
 
 }
 

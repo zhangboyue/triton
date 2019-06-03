@@ -49,6 +49,10 @@ kernel::kernel(driver::module *program, host_function_t fn, bool has_ownership):
   polymorphic_resource(fn, has_ownership), program_(program){
 }
 
+kernel::kernel(driver::module *program, vk_function_t fn, bool has_ownership):
+  polymorphic_resource(fn, has_ownership), program_(program){
+}
+
 kernel* kernel::create(driver::module* program, const char* name) {
     switch(program->backend()){
     case CUDA: return new cu_kernel(program, name);
@@ -115,6 +119,45 @@ void ocl_kernel::setArg(unsigned int index, driver::buffer* buffer) {
     kernel::setArg(index, (std::ptrdiff_t)0);
 }
 
+
+/* ------------------------ */
+//         Vulkan           //
+/* ------------------------ */
+
+vk_kernel::vk_kernel(driver::module* program, const char * name): kernel(program, vk_function_t(), true){
+  VkDevice vk_device = program->context()->device()->vk()->device;
+
+  std::vector<VkDescriptorSetLayoutBinding> bindings(2);
+  for (uint32_t i = 0; i < bindings.size(); i++) {
+      bindings[i].binding = i;
+      bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+      bindings[i].descriptorCount = 1;
+      bindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+      bindings[i].pImmutableSamplers = nullptr;
+  }
+
+  VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  descriptor_layout_info.pBindings = bindings.data();
+  descriptor_layout_info.bindingCount = bindings.size();
+  dispatch::vkCreateDescriptorSetLayout(vk_device, &descriptor_layout_info, nullptr, &vk_->descriptor_layout);
+
+
+  VkPipelineLayoutCreateInfo pipeline_layout_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+  pipeline_layout_info.setLayoutCount = 1;
+  pipeline_layout_info.pSetLayouts = &vk_->descriptor_layout;
+  dispatch::vkCreatePipelineLayout(vk_device, &pipeline_layout_info, nullptr, &vk_->pipeline_layout);
+
+
+  VkPipelineShaderStageCreateInfo shader_info = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+  shader_info.module = *program->vk();
+  shader_info.pName = name;
+  shader_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+
+  VkComputePipelineCreateInfo pipeline_info = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+  pipeline_info.stage = shader_info;
+  pipeline_info.layout = vk_->pipeline_layout;
+  dispatch::vkCreateComputePipelines(vk_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &vk_->pipeline);
+}
 
 /* ------------------------ */
 //         CUDA             //

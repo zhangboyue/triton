@@ -86,6 +86,10 @@ module::module(driver::context* ctx, host_module_t mod, bool has_ownership)
   : polymorphic_resource(mod, has_ownership), ctx_(ctx) {
 }
 
+module::module(driver::context* ctx, vk_module_t mod, bool has_ownership)
+  : polymorphic_resource(mod, has_ownership), ctx_(ctx) {
+}
+
 driver::context* module::context() const {
   return ctx_;
 }
@@ -226,6 +230,24 @@ ocl_module::ocl_module(driver::context * context, llvm::Module* src): module(con
   }
 }
 
+/* ------------------------ */
+//         Vulkan           //
+/* ------------------------ */
+
+vk_module::vk_module(driver::context *context, llvm::Module *src): module(context, vk_module_t(), true) {
+  std::ifstream fin("comp.spv", std::ifstream::ate);
+  size_t byteLength = fin.tellg();
+  fin.seekg(0, std::ifstream::beg);
+  char *data = new char[byteLength];
+  fin.read(data, byteLength);
+  fin.close();
+  // create info
+  VkShaderModuleCreateInfo create_info = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  create_info.codeSize = byteLength;
+  create_info.pCode = (uint32_t *) data;
+  dispatch::vkCreateShaderModule(context->device()->vk()->device, &create_info, nullptr, &*vk_);
+}
+
 
 /* ------------------------ */
 //         CUDA             //
@@ -274,6 +296,7 @@ cu_buffer* cu_module::symbol(const char *name) const{
   dispatch::cuModuleGetGlobal_v2(&handle, &size, *cu_, name);
   return new cu_buffer(ctx_, handle, false);
 }
+
 
 
 }

@@ -83,6 +83,21 @@ public:
   void devices(std::vector<driver::device*> &devices) const;
 };
 
+// Vulkan
+class vk_platform: public platform
+{
+private:
+  unsigned get_compute_queue_idx(VkPhysicalDevice p_device) const;
+
+public:
+  vk_platform(): platform("Vulkan") { }
+  std::string version() const;
+  void devices(std::vector<device *> &devices) const;
+
+private:
+  handle<vk_platform_t> vk_;
+};
+
 }
 
 }

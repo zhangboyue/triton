@@ -45,6 +45,8 @@ buffer::buffer(driver::context* ctx, cl_mem cl, bool take_ownership)
 buffer::buffer(driver::context* ctx, host_buffer_t hst, bool take_ownership)
   : polymorphic_resource(hst, take_ownership), context_(ctx) { }
 
+buffer::buffer(driver::context *ctx, vk_buffer_t vk, bool take_ownership)
+  : polymorphic_resource(vk, take_ownership), context_(ctx) { }
 
 driver::context* buffer::context() {
   return context_;
@@ -92,6 +94,32 @@ void cu_buffer::set_zero(driver::stream* queue, size_t size)
 {
   cu_context::context_switcher ctx_switch(*context_);
   dispatch::cuMemsetD8Async(*cu_, 0, size, *queue->cu());
+}
+
+//
+vk_buffer::vk_buffer(driver::context *context, size_t size)
+  : buffer(context, vk_buffer_t(), true) {
+  driver::vk_device* device = (driver::vk_device*)context->device();
+  VkDevice vk_device = context->device()->vk()->device;
+  // create buffer
+  VkBufferCreateInfo buffer_create_info = {};
+  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_create_info.size = size;
+  buffer_create_info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  dispatch::vkCreateBuffer(vk_device, &buffer_create_info, NULL, &vk_->buffer);
+  // allocate memory
+  VkMemoryRequirements memory_requirements;
+  dispatch::vkGetBufferMemoryRequirements(vk_device, vk_->buffer, &memory_requirements);
+  VkMemoryAllocateInfo allocateInfo = {};
+  allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocateInfo.allocationSize = memory_requirements.size; // specify required memory.
+  uint32_t idx = device->find_memory_type(memory_requirements.memoryTypeBits,
+                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+  allocateInfo.memoryTypeIndex = idx;
+  dispatch::vkAllocateMemory(vk_device, &allocateInfo, NULL, &vk_->memory);
+  // bind buffer to allocated memory
+  dispatch::vkBindBufferMemory(vk_device, vk_->buffer, vk_->memory, 0);
 }
 
 }
