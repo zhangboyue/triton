@@ -84,7 +84,7 @@ std::unique_ptr<codegen::target> vk_device::make_target() const {
 
 uint32_t vk_device::find_memory_type(uint32_t memory_type_bits, VkMemoryPropertyFlags properties) {
   VkPhysicalDeviceMemoryProperties memory_properties;
-  vkGetPhysicalDeviceMemoryProperties(vk_->p_device, &memory_properties);
+  dispatch::vkGetPhysicalDeviceMemoryProperties(vk_->p_device, &memory_properties);
   for (uint32_t i = 0; i < memory_properties.memoryTypeCount; ++i) {
     if((memory_type_bits & (1 << i)) &&
       ((memory_properties.memoryTypes[i].propertyFlags & properties) == properties))

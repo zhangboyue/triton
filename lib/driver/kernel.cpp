@@ -159,6 +159,14 @@ vk_kernel::vk_kernel(driver::module* program, const char * name): kernel(program
   dispatch::vkCreateComputePipelines(vk_device, VK_NULL_HANDLE, 1, &pipeline_info, nullptr, &vk_->pipeline);
 }
 
+void vk_kernel::setArg(unsigned int index, std::size_t size, void* ptr){
+  throw std::runtime_error("not implemented");
+}
+
+void vk_kernel::setArg(unsigned int index, driver::buffer* buffer){
+  throw std::runtime_error("not implemented");
+}
+
 /* ------------------------ */
 //         CUDA             //
 /* ------------------------ */

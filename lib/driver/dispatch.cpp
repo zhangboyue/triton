@@ -83,6 +83,17 @@ namespace driver
 #define OCL_DEFINE8(ret, fname, t1, t2, t3, t4, t5, t6, t7, t8) DEFINE8(clinit, opencl_, ret, fname, t1, t2, t3, t4, t5, t6, t7, t8)
 #define OCL_DEFINE9(ret, fname, t1, t2, t3, t4, t5, t6, t7, t8, t9) DEFINE9(clinit, opencl_, ret, fname, t1, t2, t3, t4, t5, t6, t7, t8, t9)
 
+//Specialized helpers for Vulkan
+#define VK_DEFINE1(ret, fname, t1) DEFINE1(vkinit, vulkan_, ret, fname, t1)
+#define VK_DEFINE2(ret, fname, t1, t2) DEFINE2(vkinit, vulkan_, ret, fname, t1, t2)
+#define VK_DEFINE3(ret, fname, t1, t2, t3) DEFINE3(vkinit, vulkan_, ret, fname, t1, t2, t3)
+#define VK_DEFINE4(ret, fname, t1, t2, t3, t4) DEFINE4(vkinit, vulkan_, ret, fname, t1, t2, t3, t4)
+#define VK_DEFINE5(ret, fname, t1, t2, t3, t4, t5) DEFINE5(vkinit, vulkan_, ret, fname, t1, t2, t3, t4, t5)
+#define VK_DEFINE6(ret, fname, t1, t2, t3, t4, t5, t6) DEFINE6(vkinit, vulkan_, ret, fname, t1, t2, t3, t4, t5, t6)
+#define VK_DEFINE7(ret, fname, t1, t2, t3, t4, t5, t6, t7) DEFINE7(vkinit, vulkan_, ret, fname, t1, t2, t3, t4, t5, t6, t7)
+#define VK_DEFINE8(ret, fname, t1, t2, t3, t4, t5, t6, t7, t8) DEFINE8(vkinit, vulkan_, ret, fname, t1, t2, t3, t4, t5, t6, t7, t8)
+#define VK_DEFINE9(ret, fname, t1, t2, t3, t4, t5, t6, t7, t8, t9) DEFINE9(vkinit, vulkan_, ret, fname, t1, t2, t3, t4, t5, t6, t7, t8, t9)
+
 //Specialized helpers for CUDA
 #define CUDA_DEFINE1(ret, fname, t1) DEFINE1(cuinit, cuda_, ret, fname, t1)
 #define CUDA_DEFINE2(ret, fname, t1, t2) DEFINE2(cuinit, cuda_, ret, fname, t1, t2)
@@ -136,6 +147,12 @@ bool dispatch::spvllvminit(){
   if(spvllvm_==nullptr)
     spvllvm_ = dlopen("libLLVMSPIRVLib.so", RTLD_LAZY);
   return spvllvm_ != nullptr;
+}
+
+bool dispatch::vkinit(){
+  if(vulkan_==nullptr)
+    vulkan_ = dlopen("libvulkan.so", RTLD_LAZY);
+  return vulkan_ != nullptr;
 }
 
 //CUDA
@@ -221,6 +238,47 @@ OCL_DEFINE5(cl_mem, clCreateBuffer, cl_context, cl_mem_flags, size_t, void *, cl
 OCL_DEFINE5(cl_program, clCreateProgramWithSource, cl_context, cl_uint, const char **, const size_t *, cl_int *)
 OCL_DEFINE1(cl_int, clReleaseKernel, cl_kernel)
 
+// Vulkan
+VK_DEFINE3(VkResult, vkCreateInstance, const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*)
+VK_DEFINE3(VkResult, vkEnumeratePhysicalDevices, VkInstance, uint32_t*, VkPhysicalDevice*)
+VK_DEFINE4(VkResult, vkCreateDevice, VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*)
+VK_DEFINE4(VkResult, vkGetDeviceQueue, VkDevice, uint32_t, uint32_t, VkQueue*)
+VK_DEFINE4(VkResult, vkCreateBuffer, VkDevice, const VkBufferCreateInfo *, const VkAllocationCallbacks *, VkBuffer*)
+VK_DEFINE3(VkResult, vkGetBufferMemoryRequirements, VkDevice, VkBuffer, VkMemoryRequirements*)
+VK_DEFINE4(VkResult, vkAllocateMemory, VkDevice, const VkMemoryAllocateInfo*, const VkAllocationCallbacks*, VkDeviceMemory*)
+VK_DEFINE4(VkResult, vkBindBufferMemory, VkDevice, VkBuffer, VkDeviceMemory, VkDeviceSize)
+VK_DEFINE4(VkResult, vkCreateDescriptorSetLayout, VkDevice, const VkDescriptorSetLayoutCreateInfo *, const VkAllocationCallbacks*, VkDescriptorSetLayout*)
+VK_DEFINE4(VkResult, vkCreateDescriptorPool, VkDevice, const VkDescriptorPoolCreateInfo *, const VkAllocationCallbacks*, VkDescriptorPool*)
+VK_DEFINE3(VkResult, vkAllocateDescriptorSets, VkDevice, const VkDescriptorSetAllocateInfo*, VkDescriptorSet*)
+VK_DEFINE5(VkResult, vkUpdateDescriptorSets, VkDevice, uint32_t, const VkWriteDescriptorSet *, uint32_t, const VkCopyDescriptorSet *)
+VK_DEFINE4(VkResult, vkCreateShaderModule, VkDevice, const VkShaderModuleCreateInfo *, const VkAllocationCallbacks *, VkShaderModule *)
+VK_DEFINE6(VkResult, vkCreateComputePipelines, VkDevice, VkPipelineCache , uint32_t , const VkComputePipelineCreateInfo *, const VkAllocationCallbacks *, VkPipeline *)
+VK_DEFINE4(VkResult, vkCreateCommandPool, VkDevice , const VkCommandPoolCreateInfo *, const VkAllocationCallbacks *, VkCommandPool *)
+VK_DEFINE3(VkResult, vkAllocateCommandBuffers, VkDevice , const VkCommandBufferAllocateInfo *, VkCommandBuffer *)
+VK_DEFINE2(VkResult, vkBeginCommandBuffer, VkCommandBuffer , const VkCommandBufferBeginInfo *)
+VK_DEFINE3(VkResult, vkCmdBindPipeline, VkCommandBuffer , VkPipelineBindPoint , VkPipeline )
+VK_DEFINE8(VkResult, vkCmdBindDescriptorSets, VkCommandBuffer, VkPipelineBindPoint , VkPipelineLayout , uint32_t , uint32_t , const VkDescriptorSet *, uint32_t , const uint32_t *)
+VK_DEFINE4(VkResult, vkCmdDispatch, VkCommandBuffer, uint32_t, uint32_t, uint32_t)
+VK_DEFINE1(VkResult, vkEndCommandBuffer, VkCommandBuffer)
+VK_DEFINE4(VkResult, vkCreateFence, VkDevice, const VkFenceCreateInfo *, const VkAllocationCallbacks *, VkFence *)
+VK_DEFINE4(VkResult, vkQueueSubmit, VkQueue, uint32_t, const VkSubmitInfo *, VkFence)
+VK_DEFINE5(VkResult, vkWaitForFences, VkDevice, uint32_t, const VkFence *, VkBool32 , uint64_t)
+VK_DEFINE3(VkResult, vkDestroyFence, VkDevice, VkFence, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkFreeMemory, VkDevice, VkDeviceMemory, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyBuffer, VkDevice, VkBuffer , const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyShaderModule, VkDevice, VkShaderModule, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyDescriptorPool, VkDevice, VkDescriptorPool, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyDescriptorSetLayout, VkDevice, VkDescriptorSetLayout, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyPipelineLayout, VkDevice, VkPipelineLayout, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyPipeline, VkDevice, VkPipeline , const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkDestroyCommandPool, VkDevice, VkCommandPool, const VkAllocationCallbacks *)
+VK_DEFINE2(VkResult, vkDestroyDevice, VkDevice, const VkAllocationCallbacks *)
+VK_DEFINE2(VkResult, vkDestroyInstance, VkInstance, const VkAllocationCallbacks *)
+VK_DEFINE3(VkResult, vkGetPhysicalDeviceQueueFamilyProperties, VkPhysicalDevice , uint32_t *, VkQueueFamilyProperties *)
+VK_DEFINE2(VkResult, vkGetPhysicalDeviceProperties, VkPhysicalDevice, VkPhysicalDeviceProperties *)
+VK_DEFINE4(VkResult, vkCreatePipelineLayout, VkDevice, const VkPipelineLayoutCreateInfo *, const VkAllocationCallbacks *, VkPipelineLayout *)
+VK_DEFINE2(VkResult, vkGetPhysicalDeviceMemoryProperties, VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*)
+
 // LLVM to SPIR-V
 int dispatch::initializeLLVMToSPIRVPass(llvm::PassRegistry &registry){
   return f_impl<dispatch::spvllvminit>(spvllvm_, initializeLLVMToSPIRVPass, initializeLLVMToSPIRVPass_, "initializeLLVMToSPIRVPass", std::ref(registry));
@@ -238,10 +296,11 @@ void dispatch::release(){
   }
 }
 
-void * dispatch::opencl_;
+void* dispatch::opencl_;
 void* dispatch::cuda_;
 void* dispatch::nvml_;
 void* dispatch::spvllvm_;
+void* dispatch::vulkan_;
 
 //OpenCL
 void* dispatch::clBuildProgram_;
@@ -278,6 +337,47 @@ void* dispatch::clCreateKernelsInProgram_;
 void* dispatch::clCreateBuffer_;
 void* dispatch::clCreateProgramWithSource_;
 void* dispatch::clReleaseKernel_;
+
+//Vulkan
+void* dispatch::vkCreateInstance_;
+void* dispatch::vkEnumeratePhysicalDevices_;
+void* dispatch::vkCreateDevice_;
+void* dispatch::vkGetDeviceQueue_;
+void* dispatch::vkCreateBuffer_;
+void* dispatch::vkGetBufferMemoryRequirements_;
+void* dispatch::vkAllocateMemory_;
+void* dispatch::vkBindBufferMemory_;
+void* dispatch::vkCreateDescriptorSetLayout_;
+void* dispatch::vkCreateDescriptorPool_;
+void* dispatch::vkAllocateDescriptorSets_;
+void* dispatch::vkUpdateDescriptorSets_;
+void* dispatch::vkCreateShaderModule_;
+void* dispatch::vkCreateComputePipelines_;
+void* dispatch::vkCreateCommandPool_;
+void* dispatch::vkAllocateCommandBuffers_;
+void* dispatch::vkBeginCommandBuffer_;
+void* dispatch::vkCmdBindPipeline_;
+void* dispatch::vkCmdBindDescriptorSets_;
+void* dispatch::vkCmdDispatch_;
+void* dispatch::vkEndCommandBuffer_;
+void* dispatch::vkCreateFence_;
+void* dispatch::vkQueueSubmit_;
+void* dispatch::vkWaitForFences_;
+void* dispatch::vkDestroyFence_;
+void* dispatch::vkFreeMemory_;
+void* dispatch::vkDestroyBuffer_;
+void* dispatch::vkDestroyShaderModule_;
+void* dispatch::vkDestroyDescriptorPool_;
+void* dispatch::vkDestroyDescriptorSetLayout_;
+void* dispatch::vkDestroyPipelineLayout_;
+void* dispatch::vkDestroyPipeline_;
+void* dispatch::vkDestroyCommandPool_;
+void* dispatch::vkDestroyDevice_;
+void* dispatch::vkDestroyInstance_;
+void* dispatch::vkGetPhysicalDeviceQueueFamilyProperties_;
+void* dispatch::vkGetPhysicalDeviceProperties_;
+void* dispatch::vkCreatePipelineLayout_;
+void* dispatch::vkGetPhysicalDeviceMemoryProperties_;
 
 //CUDA
 void* dispatch::cuCtxGetCurrent_;

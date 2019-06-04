@@ -164,6 +164,7 @@ public:
   static VkResult vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties);
   static VkResult vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties *pProperties);
   static VkResult vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkPipelineLayout *pPipelineLayout);
+  static VkResult vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties *pMemoryProperties);
 
   // CUDA
   static CUresult cuCtxGetCurrent(CUcontext *pctx);
@@ -261,6 +262,8 @@ private:
   static void* vkGetPhysicalDeviceQueueFamilyProperties_;
   static void* vkGetPhysicalDeviceProperties_;
   static void* vkCreatePipelineLayout_;
+  static void* vkGetPhysicalDeviceMemoryProperties_;
+
   // OpenCL functions
   static void* clBuildProgram_;
   static void* clEnqueueNDRangeKernel_;
