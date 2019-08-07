@@ -120,7 +120,7 @@ void module::compile_llvm_module(llvm::Module* module, const std::string& triple
   opt.NoInfsFPMath = false;
   opt.NoNaNsFPMath = true;
   llvm::TargetMachine *machine = target->createTargetMachine(module->getTargetTriple(), proc, features, opt,
-                                                             llvm::Reloc::PIC_, llvm::None, llvm::CodeGenOpt::Aggressive);
+                                                             llvm::Reloc::PIC_, llvm::CodeModel::Default, llvm::CodeGenOpt::Aggressive);
   // set data layout
   if(layout.empty())
     module->setDataLayout(machine->createDataLayout());
@@ -138,7 +138,7 @@ void module::compile_llvm_module(llvm::Module* module, const std::string& triple
     return llvm::TargetMachine::CGFT_AssemblyFile;
   };
   // emit
-  machine->addPassesToEmitFile(pass, stream, nullptr, ll_file_type(ft));
+  machine->addPassesToEmitFile(pass, stream, ll_file_type(ft), llvm::CodeGenOpt::Default);
   pass.run(*module);
 }
 
@@ -183,7 +183,7 @@ host_module::host_module(driver::context * context, llvm::Module* src): module(c
 
 
   // create execution engine
-  auto cloned = llvm::CloneModule(*src);
+  auto cloned = llvm::CloneModule(src);
   for(llvm::Function& fn: cloned->functions())
     hst_->functions[fn.getName()] = &fn;
   llvm::EngineBuilder builder(std::move(cloned));
